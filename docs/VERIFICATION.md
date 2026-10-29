@@ -1,76 +1,256 @@
-# Verification record
+# Verification Record
 
-Verified locally on Windows on **29 October 2026**, with Python 3.13.15 and Node.js 26.7.0.
+**Project:** Classroom Insight — Multimodal Attendance & Engagement Agent
+**Environment:** Windows, Python 3.13.15, Node.js 26.7.0
+**Last recorded verification:** 29 October 2026
 
-## Screenshot documentation attempt — 29 October 2026
+This document records the reported automated test results, integration checks, data-preservation checks, screenshot status, and known verification limitations. A successful test run does not establish real-world classroom accuracy or production readiness.
 
-- **Zero screenshots captured.** Browser inventory, browser selection and opening the real local URL were rejected with `Local browser use is disabled in Work settings`. The user reported enabling access twice; fresh tool sessions still returned the same rejection. No replacement driver was installed to bypass the gate, and no synthetic or placeholder image was created.
-- Inspected README, package scripts, installed dependencies, Python runtime, source routes and schema. No project Playwright setup was installed. Started the existing Flask command; health, public configuration and built frontend at `http://127.0.0.1:5000/` returned HTTP 200.
-- The initial listener query returned no result; the attempted Vite startup then reported port 5173 occupied. Process inspection identified the existing Vite process as this repository's instance. A later HTTP request to 5173 was refused. That process was left untouched; Flask's built SPA provides the documented manual-capture fallback. The Flask process started for this attempt remains available for manual review.
-- Added `docs/ARCHITECTURE.md` with actual module/request/media flows and the complete ER diagram. A read-only SQLite comparison verified all **10 table names and ordered column lists** against the diagram. Mermaid rendering in a browser was not tested.
-- Added `docs/screenshots/README.md` with honest capture status, planned filenames, safe fictional form details and precise manual steps. Root README now links to it rather than embedding nonexistent PNGs. `docs/SCREENSHOTS.md` points to the current capture index.
-- Before/after row counts and SHA-256 hashes matched for **students, sessions, attendance, analyses, recommendations, settings, events and institutional_enquiries**. No attendance changes, resets, consultation submission, new readiness generation or application-code edits were made.
-- All relative links in the changed documentation resolved. There are no PNGs to decode or visually inspect. Existing tests/build results below are historical; they were **not rerun** for documentation-only changes. No commit, push or deployment was performed.
+## 1. Current Status Summary
 
-## Final public experience phase — current results
+| Area | Recorded status |
+|---|---|
+| Backend automated tests | 45 passed in the final-phase verification report |
+| Frontend automated tests | 19 passed across three files in the final-phase verification report |
+| Frontend production build | Passed |
+| Python dependency check | `pip check` passed |
+| Flask and Vite integration | HTTP checks passed in the recorded verification |
+| SQLite enquiry persistence | Passed, including idempotent replay |
+| Synthetic media processing | Passed for tested WAV and AVI workflows |
+| Gemini readiness generation | A real request returned HTTP 200 and passed schema validation |
+| Security checks | Recorded source/bundle secret-pattern scan and isolated ignore-rule check passed |
+| Screenshots | 11 PNG files were committed; two planned captures remain outstanding |
+| Final homepage browser review | Incomplete |
+| Real-world attendance and engagement accuracy | Not established |
+| Production deployment readiness | Not established |
 
-This section supersedes older test totals and Gemini-generation limitations below. Historical browser checks describe the original dashboard before this extension, not a visual verification of the final homepage.
+**Evidence boundary:** The test totals and integration results below are from the verification reports recorded on 29 October 2026. They have not been independently rerun as part of this documentation update.
 
-- **45 backend pytest tests passed.** The original 17 pass with demo login. New coverage includes cookie rotation/revocation/expiry, protected APIs, cross-origin rejection, enquiry SQLite persistence across reinitialization, same-key duplicate replay and changed-payload conflict, allowed option and length/count/consent validation, request limits, server-generated references, no public listing, missing Gemini configuration, structured response validation, authoritative capability descriptions, invalid model output, provider access/quota/timeout errors and sanitized database failures.
-- **19 frontend Vitest tests passed across three files.** All original nine tests pass. New tests exercise public section links, example switching without AI calls, navigation toggle, modal validation/show-password/Escape-event/backdrop handling, body scroll lock and restored focus, successful and invalid demo login, refresh/legacy route access, dashboard navigation, sign-out and protected redirects, consultation step validation/review/optional consent/double-click protection/retry idempotency, readiness success/error/retry and website availability when session lookup fails. jsdom mocks native dialog opening; native browser Tab containment is not established by these tests.
-- **`npm run build` passed** (TypeScript + Vite). Public entry approximately 298 KB / 95 KB gzip, dashboard approximately 58 KB / 16 KB gzip, chart chunk approximately 388 KB / 111 KB gzip. Login and consultation dialogs are separate lazy chunks. Local fonts are emitted in `dist/assets`, with primary Latin font preloads rewritten to built asset paths.
-- **`pip check` passed.** Existing Python packages remain compatible; Pydantic is now an explicit dependency. No new animation or component library was installed. Font packages carry OFL licenses in their installed distributions.
-- **Live Flask + Vite HTTP checks passed.** Nine SPA URLs returned the built shell; Vite and its API proxy responded; four built entry/font assets returned non-HTML content successfully; all operational read/export endpoints worked after cookie login; unauthenticated access was rejected; logout cleared access. Sandbox loopback initially failed with WinError 10013 and then timed out against an isolated server. Launching the verification backend and HTTP client through approved execution outside the sandbox resolved this environment issue.
-- **Live enquiry persistence passed.** `scripts/portal_smoke.py` saved one explicitly synthetic, non-consenting evaluation enquiry with reference `CI-CBE42141A923`, verified its details/status directly in SQLite, and replayed the same key to receive the same reference. No email was sent. The record remains for the evaluator. It is labelled synthetic in its organization and notes; it is not a customer enquiry.
-- **Live media regression passed.** `scripts/http_smoke.py` logged in through the new session flow, processed synthetic WAV and AVI uploads through the asynchronous worker, verified local recommendations/CSV/analytics and unchanged attendance, then removed its own student/session/media. FFmpeg remains unavailable; video reported that limitation while completing video observations.
-- **Real Gemini generation passed.** `scripts/verify_readiness.py` sent fictional, non-identifying institutional workflow data through the Flask readiness endpoint. An initial provider 400 rejected `additional_properties` under the SDK's legacy `response_schema`. The implementation was corrected to `response_json_schema`, then a real request returned **HTTP 200, source=gemini**, with all sections passing Pydantic validation. The reviewed output proposed a consented one-course/single-instructor pilot, manual identity confirmation, measurable operational criteria and governance review; no integrations or outcome guarantees were represented as available. Full fictional output is in ignored `data/verification/readiness-real.json`. This confirms generation, not merely model access. Quota/model availability can change.
-- **Security check passed.** `scripts/security_check.py` found no configured key/secret or standard Gemini-key pattern in source/docs/scripts or the production bundle. It verified ignore rules using an isolated temporary Git repository: `.env`, databases, uploads, virtual environments, dependencies and build outputs are excluded; `.env.example` remains trackable. The project itself still has no Git repository; no commit or push was performed.
-- **Preservation:** the existing 12 students, six sessions, 72 attendance entries and six analyses remain. There are 14 saved recommendations at final inspection; existing records were not reset or replaced. Only the separately labelled synthetic enquiry and additive portal tables were introduced by the portal smoke check.
+## 2. Screenshot Verification
 
-### Remaining verification boundary
+Eleven screenshot files were included in the initial Git commit:
 
-Computer-use inventory reported **“Local browser use is disabled in Work settings.”** No setting was changed or bypassed. The final homepage's desktop/tablet/mobile appearance, native focus trapping, actual Escape-key/backdrop behavior, font rendering/layout shift, reduced-motion appearance and browser screenshots remain **unverified**. Responsive CSS, native-dialog semantics, local font assets, reduced-motion overrides and interaction tests are implemented, but they do not replace a real browser pass. Follow `docs/SCREENSHOTS.md` for the outstanding evaluator checks.
+- `docs/screenshots/public-homepage.png`
+- `docs/screenshots/employee-login.png`
+- `docs/screenshots/consultation-form.png`
+- `docs/screenshots/dashboard.png`
+- `docs/screenshots/attendance.png`
+- `docs/screenshots/sessions.png`
+- `docs/screenshots/engagement-analytics.png`
+- `docs/screenshots/recommendations.png`
+- `docs/screenshots/students.png`
+- `docs/screenshots/reports.png`
+- `docs/screenshots/settings.png`
 
-No hosted deployment, real employee identity system, email service, multi-tenant isolation, institutional compliance review or real-classroom detector validation is claimed.
+Their presence in Git confirms that the files were committed. It does not independently establish that every image was visually reviewed, correctly framed, or free of sensitive information.
 
-The owned Flask verification process was stopped after checks. A pre-existing Vite process was reused and left untouched. Start Flask with the README command; reuse the frontend already listening on port 5173 or start Vite if it is no longer running.
+Two additional screenshots remain pending:
 
-## Original core phase — historical evidence
+- `docs/screenshots/readiness-brief.png`
+- `docs/screenshots/mobile-homepage.png`
 
-## Automated checks
+The browser-control tool repeatedly reported `Local browser use is disabled in Work settings`. The attempted final-phase capture could not be completed through that tool. No synthetic or placeholder images were created as substitutes.
 
-- **17 backend pytest tests passed.** Coverage includes schema initialization, empty responses, student CRUD and case-insensitive duplicate validation, session CRUD/date validation, attendance math and roster snapshots, analytics filters, CSV formula protection, missing-key fallback, mocked provider failure, advisory thresholds, upload type/size validation, corrupt video, real synthetic PCM audio, original/full-analysis deletion, synthetic video scene changes, HOG execution, detector-initialization fallback, empty/truncated WAV rejection, sample isolation/idempotency/reset, settings and local request restrictions.
-- **9 frontend Vitest tests passed.** Coverage includes eight-route navigation, empty/sample actions, student registration, session creation, server-error retry, reset confirmation, multipart request construction, successful upload refresh, refresh failure after an accepted upload and backend upload errors.
-- Upload component tests explicitly dispatch form submission after checking the selected-file UI. `user-event` patches the public FileList while jsdom's native required-file check reads its internal list. These tests do not claim to verify a native OS file picker.
-- **TypeScript and Vite production build passed**, with separate app and chart bundles and no chunk-size warning. App JS is about 326 KB before compression; the lazily loaded chart bundle is about 388 KB.
-- `pip check`: no broken requirements. npm installation audit reported zero vulnerabilities at installation time; this is not a comprehensive security assessment.
+See [SCREENSHOTS.md](SCREENSHOTS.md) and the [screenshot index](screenshots/README.md) for capture instructions and review requirements.
 
-## Running application checks
+## 3. Final Public Experience Phase
 
-- Vite frontend and Flask backend were launched. Windows sandbox networking initially prevented localhost access; approved execution outside the sandbox restored access.
-- The built SPA was also served through the documented **Waitress** command. All eight deep links returned HTTP 200 with the built app shell.
-- `scripts/http_smoke.py` verified the live HTTP API and actual asynchronous worker: synthetic WAV upload (4 seconds, 50% sound-active), synthetic AVI upload with HOG/scene measurements, job completion, CSV export, analytics and local recommendations. Analysis did not change attendance. The script removed its temporary student/session/media.
-- `scripts/generate_test_media.py` creates the non-sensitive recordings in ignored `data/verification/` for repeatable testing.
+The final-phase verification report recorded the following results.
 
-## Browser checks completed
+### Backend tests
 
-- Empty overview, loading labelled sample data, manual attendance change and recalculated totals.
-- Student registration and session creation against the live API, plus opening the associated upload dialog.
-- All eight production routes at **390 × 844** and **768 × 1024**. Each heading was checked after navigation; no document-level horizontal overflow remained. Tables scroll inside their containers.
-- Desktop dashboard appearance inspected, and student/session dialogs exercised at **1440 × 1000**.
-- Production browser console had no captured error or warning entries during the route checks.
-- Fixed a mobile overflow from an absolutely positioned screen-reader label in a table header; established the header as its containing block. Hid the closed mobile sidebar from keyboard navigation. Changed chart axes to start at zero and split charts into a lazy bundle.
+**45 pytest tests passed.**
 
-## Verification limits
+Reported coverage includes:
 
-- Local browser use became disabled in Work settings before native file-picker completion. The full browser upload interaction, downloadable screenshot capture, a complete desktop visual pass for every route, and native print/PDF dialog remain unverified. HTTP uploads and component upload states passed independently. Earlier mobile/tablet/browser results above were observed before that restriction.
-- A Gemini credential was supplied during the session. A final request through `/api/config/verify-gemini` successfully verified that the configured model is accessible and advertises content generation. No classroom data was sent. Actual recommendation generation and generation quota were not exercised. The missing-key and mocked provider-failure fallback paths also passed.
-- FFmpeg is not installed in this environment. Direct PCM WAV analysis and video-only processing passed; compressed-audio decoding and extraction from video remain unverified here.
-- Synthetic recordings verify execution and arithmetic, **not accuracy on real classroom recordings**. HOG is explicitly a limited anonymous estimate.
-- No public deployment, multi-user authentication, institutional privacy review, accessibility audit, load test or malicious-media isolation test was performed. This is a local single-instructor submission.
+- Demo-session cookie creation, rotation, revocation, and expiry.
+- Protected APIs and cross-origin write rejection.
+- Enquiry persistence across database reinitialization.
+- Idempotent duplicate requests and conflicting payload detection.
+- Form option, length, count, consent, and request-size validation.
+- Server-generated enquiry references and the absence of public enquiry-listing endpoints.
+- Missing Gemini configuration and structured-response validation.
+- Authoritative capability descriptions and invalid model output.
+- Provider access, quota, timeout, and sanitized database error paths.
 
-## Submission hygiene
+### Frontend tests
 
-The workspace initially contained no project or Git repository. No commit or push was performed. Git ignore rules were tested in an isolated temporary repository: `.env`, virtual environments, databases, uploads, caches, node_modules and builds are excluded, while `.env.example` is includable. Standard credential-pattern scans of source and built frontend found no matches. A root `.env` was created with a generated local secret; a Gemini credential was subsequently supplied during the session. Neither credential was displayed or included in distributable source.
+**19 Vitest tests passed across three files.**
 
-The temporary browser verification student/session were removed, and the sample attendance change was restored. The labelled sample classroom remains available for review. Verification servers are stopped at handoff; use README startup commands to reopen the app.
+Reported coverage includes:
+
+- Public navigation and interactive examples.
+- Login validation and password visibility.
+- Modal close behavior, Escape-event handling, body scroll locking, and focus restoration.
+- Dashboard navigation, refresh, sign-out, and protected-route redirects.
+- Consultation form validation, review, optional consent, retries, and duplicate-submission protection.
+- Readiness success, failure, retry, and homepage availability when session lookup fails.
+
+The tests use jsdom and mocks for some native browser behavior. They do not establish correct native-browser focus containment or complete visual behavior.
+
+### Production build and dependencies
+
+- `npm run build` passed using TypeScript and Vite.
+- The verification report recorded separate frontend, dashboard, and chart bundles, with login and consultation dialogs loaded separately.
+- Local fonts were emitted as production assets.
+- `pip check` passed.
+- Pydantic was recorded as an explicit dependency.
+
+These results are historical verification evidence; repeat the commands to confirm the current checkout.
+
+## 4. HTTP, Portal, and Database Checks
+
+The recorded live integration checks reported:
+
+- Nine SPA URLs returned the built application shell.
+- The Vite server and API proxy responded.
+- Built frontend and font assets were served successfully.
+- Operational read and export endpoints worked after demo login.
+- Unauthenticated operational access was rejected.
+- Sign-out revoked access.
+- Consultation data persisted in SQLite.
+- Replaying the same idempotency key returned the same reference.
+- No email was sent.
+
+One explicitly synthetic, non-consenting institutional enquiry was retained for evaluator inspection. Its recorded reference was `CI-CBE42141A923`. This is test data, not a customer enquiry.
+
+The portal smoke test is designed to reuse its idempotency key on subsequent runs. Check the current database before running tests that create or retain records.
+
+## 5. Media Analysis Checks
+
+The recorded media regression used synthetic WAV and AVI files through the asynchronous analysis workflow.
+
+Reported checks covered:
+
+- Audio energy analysis.
+- Video scene-change measurements.
+- Execution of the HOG pedestrian detector.
+- Job completion.
+- Local recommendations, analytics, and CSV export.
+- Unchanged attendance during analysis.
+- Cleanup of temporary test student, session, and media records.
+
+FFmpeg was unavailable in the recorded environment. Compressed audio decoding and audio extraction from video therefore remain unverified there.
+
+Synthetic media verifies that the tested processing path executes. It does **not** prove reliable person counts, attendance accuracy, speech recognition, engagement validity, or performance on real classroom recordings.
+
+## 6. Gemini Readiness Verification
+
+The final-phase report recorded a real Gemini readiness-generation request using fictional, non-identifying institutional workflow information.
+
+- An initial provider request failed because of schema-field compatibility.
+- The implementation was updated to use `response_json_schema`.
+- A subsequent request returned HTTP 200 with `source=gemini`.
+- The result passed Pydantic schema validation.
+- The report was saved to ignored `data/verification/readiness-real.json`.
+
+This demonstrates a successful generation request at the time of verification. It does not guarantee future API availability, remaining quota, or the correctness of generated advice.
+
+The recorded dashboard recommendation tests also covered deterministic local fallback behavior. No cloud request is intended merely because the dashboard renders.
+
+## 7. Security and Data Preservation
+
+The recorded security check reported:
+
+- No configured key, secret, or standard Gemini-key pattern detected in the scanned source, documentation, scripts, or production bundle.
+- `.env` and local data were excluded by ignore rules in an isolated temporary Git repository.
+- `.env.example` remained trackable.
+- Dependency compatibility passed `pip check`.
+
+The ignore-rule test does not prove the absence of every possible secret. The current Git history and staged changes should still be checked before future public pushes.
+
+The recorded preservation check found the following classroom data remained available:
+
+- 12 students.
+- 6 sessions.
+- 72 attendance entries.
+- 6 analyses.
+- 14 saved recommendations at final inspection.
+
+The portal verification added a separately labelled synthetic enquiry. The report states that existing classroom records were not reset or replaced.
+
+## 8. Original Core Phase — Historical Evidence
+
+The earlier core-phase report recorded:
+
+- **17 backend pytest tests passed.**
+- **9 frontend Vitest tests passed.**
+- TypeScript and Vite production build passed.
+- Python dependency compatibility check passed.
+- Synthetic WAV and AVI processing, analytics, recommendations, and CSV export were exercised.
+- All eight dashboard routes were inspected at 390 × 844 and 768 × 1024.
+- Desktop dashboard appearance and student/session dialogs were inspected at 1440 × 1000.
+- A mobile overflow issue was fixed, and chart loading was split into a separate lazy bundle.
+
+These are historical results from the original dashboard phase. They are not evidence that the final public homepage, consultation modal, or readiness result received the same full browser inspection.
+
+## 9. Remaining Verification Limitations
+
+The following areas remain unverified or incomplete:
+
+- The final public homepage's complete desktop, tablet, and mobile appearance.
+- The two pending screenshots.
+- Native-browser keyboard focus containment, focus restoration, backdrop/Escape handling, and modal scrolling across supported browsers.
+- Real-world person-detection and attendance accuracy.
+- Reliable classroom engagement measurement.
+- Compressed audio processing and video audio extraction without FFmpeg.
+- Load testing, malicious-media isolation, and production resource controls.
+- Institutional privacy, accessibility, and security audits.
+- Production identity management, tenant isolation, email delivery, and hosted deployment.
+
+The application is a **local, single-instructor demonstration**, not a production-ready multi-user institutional service. AI output is advisory, and observable media signals must not be treated as definitive evidence of student attention or learning.
+
+## 10. Reverification Commands
+
+Run these commands from the project root in PowerShell.
+
+### Backend tests
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+### Frontend tests
+
+```powershell
+npm test
+```
+
+### Production build
+
+```powershell
+npm run build
+```
+
+### Python dependency check
+
+```powershell
+.\.venv\Scripts\python.exe -m pip check
+```
+
+### Portal smoke test
+
+Start Flask first, then run:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/portal_smoke.py
+```
+
+This test can retain a synthetic enquiry for evaluator inspection. Review its behavior and the existing database before running it again.
+
+### Media smoke test
+
+```powershell
+.\.venv\Scripts\python.exe scripts/generate_test_media.py
+.\.venv\Scripts\python.exe scripts/http_smoke.py
+```
+
+Start the backend before running the HTTP smoke test. Use only test data and verify cleanup afterward.
+
+## 11. Git and Handoff Status
+
+The initial commit was created and pushed to the `main` branch of the configured GitHub repository on 29 October 2026.
+
+The screenshot files listed in Section 2 were included in that commit. The readiness-brief and mobile-homepage screenshots were not included.
+
+This document records prior verification results and remaining limitations. It does not certify that all tests were rerun after the initial commit or after this documentation change.
