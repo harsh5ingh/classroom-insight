@@ -1,0 +1,7 @@
+{
+  "organization_types": ["School", "College or university", "Coaching or training centre", "Corporate learning and development", "Other"],
+  "attendance_methods": ["Paper registers", "Spreadsheets", "Existing attendance software", "Learning management system", "Other or not yet established"],
+  "requirements": ["Digital attendance records", "Classroom video analysis", "Audio and session activity analysis", "Session-level analytics", "AI-assisted teaching recommendations", "Reports and exports", "Existing system integration", "Privacy and data governance consultation", "Other"],
+  "deployment_models": ["Local/on-premises", "Institution-managed cloud", "Public cloud", "Unsure"],
+  "timelines": ["Within 1 month", "1–3 months", "3–6 months", "6+ months", "Exploring options"]
+}

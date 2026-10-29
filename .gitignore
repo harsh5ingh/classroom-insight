@@ -1,0 +1,111 @@
+# ==========================================
+# Classroom Insight — Git Ignore
+# ==========================================
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+secrets/
+credentials.json
+
+# Node.js / React / Vite
+node_modules/
+dist/
+dist-ssr/
+.vite/
+coverage/
+.nyc_output/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist-packages/
+.eggs/
+wheels/
+*.egg-info/
+pip-wheel-metadata/
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python tooling and test caches
+.pytest_cache/
+.mypy_cache/
+.pytype/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editors and operating systems
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local application data — may contain sensitive records
+data/
+instance/
+
+# SQLite databases and journals
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.sqlite-journal
+*.sqlite3-journal
+
+# Uploaded media and generated artifacts
+uploads/
+media/
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+
+# Generated reports and exports
+exports/
+reports/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
+
+# Keep project configuration and documentation tracked
+!.gitignore
+!README.md
+!docs/
+!docs/**
+
+# TypeScript incremental build cache
+*.tsbuildinfo

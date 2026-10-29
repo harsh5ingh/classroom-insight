@@ -1,0 +1,243 @@
+@import "tailwindcss";
+@theme {
+  --color-canvas: #f6f4ee;
+  --color-surface: #ffffff;
+  --color-secondary: #eeece3;
+  --color-ink: #252a24;
+  --color-muted: #73776d;
+  --color-forest: #285943;
+  --color-deep: #193d30;
+  --color-sage: #dce6d9;
+  --color-amber: #c58b43;
+  --color-line: #e3e1d8;
+  --color-error: #b54b43;
+  --font-sans: "Manrope Variable", "Segoe UI", sans-serif;
+  --font-editorial: "DM Serif Display", "Georgia", serif;
+}
+@layer base {
+  body {
+    @apply m-0 bg-canvas text-ink font-sans text-sm antialiased;
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button,
+  select {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: wait;
+    opacity: 0.55;
+  }
+  :focus-visible {
+    outline: 2px solid #285943;
+    outline-offset: 3px;
+  }
+  h1 {
+    @apply font-editorial text-3xl tracking-tight;
+  }
+  h2 {
+    @apply text-lg font-semibold tracking-tight;
+  }
+  h3 {
+    @apply font-semibold;
+  }
+  input,
+  select,
+  textarea {
+    @apply w-full border border-line rounded-md bg-white px-3 py-2.5 text-ink;
+  }
+  input[type="checkbox"] {
+    width: auto;
+    accent-color: #285943;
+  }
+  th {
+    @apply relative text-left text-xs font-medium text-muted py-3 px-4 bg-canvas;
+  }
+  td {
+    @apply px-4 py-4 border-t border-line;
+  }
+  table {
+    @apply w-full border-collapse;
+  }
+}
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors border border-line bg-white hover:bg-secondary whitespace-nowrap;
+  }
+  .btn-primary {
+    @apply bg-forest text-white border-forest hover:bg-deep;
+  }
+  .btn-danger {
+    @apply text-error border-error/30 hover:bg-error/5;
+  }
+  .panel {
+    @apply border border-line rounded-lg bg-white;
+  }
+  .section-head {
+    @apply flex flex-wrap justify-between items-start gap-3 mb-5;
+  }
+  .eyebrow {
+    @apply text-[11px] uppercase tracking-[0.14em] font-semibold text-muted;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium bg-secondary text-muted;
+  }
+  .badge-green {
+    @apply bg-sage text-forest;
+  }
+  .field {
+    @apply flex flex-col gap-2 text-sm font-medium;
+  }
+  .subtle {
+    @apply text-muted text-sm leading-relaxed;
+  }
+  .metric {
+    @apply py-5 px-6 border-r border-line last:border-r-0;
+  }
+  .nav-link {
+    @apply flex items-center gap-3 px-3 py-3 rounded-md text-white/65 hover:text-white hover:bg-white/5 transition-colors;
+  }
+  .nav-link.active {
+    @apply text-white bg-white/10;
+    box-shadow: inset 3px 0 #b7ceac;
+  }
+  .chart {
+    width: 100%;
+    min-width: 0;
+    height: 250px;
+  }
+}
+dialog {
+  border: none;
+  padding: 0;
+  background: transparent;
+  max-width: calc(100vw - 32px);
+  width: 520px;
+  max-height: 90vh;
+}
+dialog::backdrop {
+  background: rgb(25 42 33 / 0.48);
+  backdrop-filter: blur(5px);
+}
+dialog[open] {
+  margin: auto;
+  animation: dialog-in 180ms ease-out;
+}
+.dialog-wide {
+  width: 760px;
+}
+.dialog-shell {
+  display: flex;
+  flex-direction: column;
+  max-height: min(90dvh, 880px);
+  background: #fffefa;
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  box-shadow: 0 24px 80px #193d3029;
+  overflow: hidden;
+}
+.dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 28px;
+  border-bottom: 1px solid var(--color-line);
+  flex-shrink: 0;
+}
+.dialog-heading h2 {
+  font-size: 20px;
+}
+.dialog-body {
+  padding: 28px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+.dialog-footer {
+  padding: 18px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--color-line);
+  flex-shrink: 0;
+}
+.brand-wordmark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-deep);
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+}
+.brand-wordmark svg {
+  width: 35px;
+  height: 35px;
+  flex-shrink: 0;
+}
+.brand-wordmark span {
+  display: block;
+}
+.brand-wordmark.inverse {
+  color: white;
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 600px) {
+  .dialog-heading,
+  .dialog-body {
+    padding: 20px;
+  }
+  .dialog-footer {
+    padding: 16px;
+    flex-wrap: wrap;
+  }
+  .dialog-heading h2 {
+    font-size: 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+.recharts-wrapper:focus {
+  outline: none;
+}
+@media print {
+  aside,
+  header,
+  .no-print {
+    display: none !important;
+  }
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body {
+    background: white;
+  }
+  .panel {
+    break-inside: avoid;
+  }
+}

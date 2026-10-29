@@ -1,0 +1,17 @@
+{
+  "version": "2026-10-29",
+  "capabilities": {
+    "attendance": {"title": "Instructor-confirmed attendance", "description": "Registered student rosters, present/absent/unconfirmed records, attendance history and trends. Identity is confirmed manually."},
+    "video": {"title": "Local video observations", "description": "OpenCV sampled frame differences and optional HOG visible-person estimates. HOG often misses seated or occluded people; it cannot identify students."},
+    "audio": {"title": "Audio activity indicators", "description": "PCM WAV RMS energy and sound-active intervals. Other audio formats and extraction require FFmpeg. This is not verified speech or speaker attribution."},
+    "analytics": {"title": "Session-level analytics", "description": "Attendance trends, recording time series, date/session filters and comparison of available measurements. No internal attention or emotion inference."},
+    "recommendations": {"title": "Advisory teaching suggestions", "description": "Evidence-linked local rules and optional Gemini suggestions using aggregate session metrics, subject to instructor review."},
+    "exports": {"title": "Reviewable records and exports", "description": "Attendance CSV, full session JSON and browser print/PDF reports. Files can contain student information."}
+  },
+  "limitations": [
+    "The current implementation is a local, single-instructor application with explicitly demo-only login; it is not a secure institutional identity system or multi-tenant platform.",
+    "No LMS/SIS integrations, cloud deployment, automated email delivery, compliance certifications, institutional customers or validated learning outcomes are established.",
+    "Media consent, retention, access control, backups and institutional governance require assessment before a real pilot. No accuracy guarantee is made for classroom detection.",
+    "Institution-managed and public cloud are consultation preferences, not delivered deployment capabilities. Automated signals do not establish identity, attention, emotion or learning."
+  ]
+}
