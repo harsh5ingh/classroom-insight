@@ -30,19 +30,32 @@ def summarize(analysis, attendance):
         values = [p['activity'] for p in video['points'] if p['activity'] is not None]
         metrics['scene_change_mean'] = round(float(np.mean(values)),2) if values else None
         metrics['scene_change_range'] = round(max(values)-min(values),2) if values else None
-        # Runs span the intervals ending at each low-change sample.
+        # Use actual timestamps; do not bridge missing/irregular frame gaps.
         longest = current = 0
+        previous = None
         for point in video['points']:
-            current = current + video['sample_seconds'] if point['activity'] is not None and point['activity'] < 3 else 0
+            dt = point['seconds']-previous if previous is not None else 0
+            current = current + dt if point['activity'] is not None and point['activity'] < 3 and 0 < dt <= video['sample_seconds']*1.5 else 0
             longest = max(longest,current)
+            previous = point['seconds']
         metrics['low_scene_change_seconds'] = round(longest)
     if audio:
         metrics['sound_active_fraction'] = audio['active_fraction']
+        metrics['sound_bouts'] = audio.get('activity_bouts')
+    fusion = (analysis or {}).get('fusion')
+    if fusion:
+        metrics['observable_activity_index'] = fusion['score']
+        metrics['joint_signal_windows'] = fusion['joint_windows']
+        metrics['activity_index_caveat'] = fusion['limitations']
     return metrics
 
 def local_rules(metrics):
     items = []
     attendance = metrics['attendance']
+    if 'joint_signal_windows' in metrics and metrics['joint_signal_windows']==0:
+        items.append({'title':'Review signal coverage before comparing sessions',
+                      'body':'Only partial signals support the activity index. Check recording alignment and available audio before comparing it with another session. It does not measure attention.',
+                      'evidence':'No time window contains both visual change and audio activity observations.'})
     if attendance['unconfirmed']:
         items.append({'title':'Complete the attendance record', 'body':'Confirm outstanding students before interpreting the attendance rate.',
                       'evidence':f"{attendance['unconfirmed']} attendance records are unconfirmed."})

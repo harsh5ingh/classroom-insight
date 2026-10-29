@@ -21,6 +21,12 @@ import { useData } from "./data";
 import { Chart } from "./ChartView";
 import { StudentForm } from "./forms";
 import {
+  AttendanceHistory,
+  PresenceReview,
+  FusionPanel,
+  FusionForm,
+} from "./Observations";
+import {
   Alert,
   Badge,
   Button,
@@ -34,6 +40,7 @@ import type {
   Analysis,
   Analytics,
   AttendanceStatus,
+  AttendanceChange,
   Session,
   Student,
 } from "./types";
@@ -563,8 +570,12 @@ export function Attendance() {
   const [records, setRecords] = useState<
     (Pick<Student, "id" | "name" | "identifier" | "cohort"> & {
       status: AttendanceStatus;
+      confirmed_at?: string | null;
+      updated_at?: string | null;
+      source?: string;
     })[]
   >([]);
+  const [changes, setChanges] = useState<AttendanceChange[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -574,9 +585,14 @@ export function Attendance() {
     let active = true;
     setLoading(true);
     setError("");
-    api<{ records: typeof records }>(`/sessions/${selected}/attendance`)
+    api<{ records: typeof records; changes?: AttendanceChange[] }>(
+      `/sessions/${selected}/attendance`,
+    )
       .then((v) => {
-        if (active) setRecords(v.records);
+        if (active) {
+          setRecords(v.records);
+          setChanges(v.changes || []);
+        }
       })
       .catch((e) => {
         if (active) setError(e.message);
@@ -743,6 +759,7 @@ export function Attendance() {
                 <th>Identifier</th>
                 <th>Cohort</th>
                 <th>Attendance status</th>
+                <th>Last confirmed</th>
               </tr>
             </thead>
             <tbody>
@@ -768,6 +785,17 @@ export function Attendance() {
                       <option value="absent">Absent</option>
                     </select>
                   </td>
+                  <td className="text-xs text-muted">
+                    {r.confirmed_at
+                      ? new Date(r.confirmed_at).toLocaleString()
+                      : "Not recorded"}
+                    <br />
+                    {r.source === "instructor_reviewed_track"
+                      ? "Instructor-reviewed track"
+                      : r.source === "manual"
+                        ? "Manual"
+                        : "Legacy / unconfirmed"}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -782,6 +810,7 @@ export function Attendance() {
         Unconfirmed entries remain in the attendance-rate denominator. Anonymous
         detection never changes this record.
       </p>
+      <AttendanceHistory changes={changes} />
     </div>
   );
 }
@@ -952,6 +981,11 @@ export function Students() {
                     </p>
                   </div>
                   <Badge green={h.status === "present"}>{h.status}</Badge>
+                  <span className="text-xs text-muted">
+                    {h.confirmed_at
+                      ? new Date(h.confirmed_at).toLocaleString()
+                      : "Confirmation time not recorded"}
+                  </span>
                 </div>
               ))}
             </div>
@@ -984,6 +1018,28 @@ function AnalysisDetail({ analysis }: { analysis: Analysis }) {
           {analysis.filename} · {formatDate(analysis.created_at)}
         </span>
       </div>
+      {result.fusion && <FusionPanel fusion={result.fusion} />}
+      <PresenceReview analysis={analysis} />
+      {video?.face_tracking && (
+        <section className="panel p-5">
+          <SectionHead
+            title="Detected frontal faces"
+            description="Anonymous sampled detections, separate from HOG person estimates"
+          />
+          <Chart
+            data={video.points.map((p) => ({ ...p }))}
+            xKey="seconds"
+            label="Detected frontal faces by sampled frame"
+            series={[
+              {
+                key: "faces",
+                label: "Frontal face detections (max 100/frame)",
+                color: green,
+              },
+            ]}
+          />
+        </section>
+      )}
       <div className="grid lg:grid-cols-2 gap-6">
         {video && (
           <>
@@ -1047,6 +1103,20 @@ function AnalysisDetail({ analysis }: { analysis: Analysis }) {
               {audio.method} Sound activity does not establish speech, speaker
               identity, or participation.
             </p>
+            {audio.activity_bouts !== undefined && (
+              <p className="subtle text-xs mt-3">
+                Sound-active bouts: {audio.activity_bouts} ·{" "}
+                {audio.bouts_per_minute} per minute. These are not speaker
+                turns.
+              </p>
+            )}
+            {audio.speech_like_fraction !== undefined && (
+              <p className="subtle text-xs mt-3">
+                Speech-like acoustic heuristic:{" "}
+                {(audio.speech_like_fraction * 100).toFixed(1)}% of duration.{" "}
+                {audio.speech_method}
+              </p>
+            )}
             {audio.active_intervals.length > 0 && (
               <details className="mt-4 text-xs">
                 <summary className="cursor-pointer text-forest">
@@ -1064,6 +1134,11 @@ function AnalysisDetail({ analysis }: { analysis: Analysis }) {
       </div>
       {result.unavailable.map((s) => (
         <Alert key={s}>{s}</Alert>
+      ))}
+      {result.notes.map((note, i) => (
+        <p className="subtle text-xs" key={i}>
+          {note}
+        </p>
       ))}
     </div>
   );
@@ -1106,8 +1181,9 @@ export function AnalyticsPage() {
     <div className="space-y-6">
       <SectionHead
         title="Observe patterns. Keep the context."
-        description="Session-level measurements, without an invented engagement score."
+        description="Session observations and an explainable activity index. Not a measurement of attention or learning."
       />
+      <FusionForm />
       <div className="flex flex-wrap gap-4">
         <label className="field flex-1 min-w-48">
           Session
@@ -1355,26 +1431,71 @@ export function Reports() {
     : sessions;
   const total = list.reduce((v, s) => v + s.attendance.total, 0);
   const present = list.reduce((v, s) => v + s.attendance.present, 0);
-  const download = () => {
-    const ids = new Set(list.map((s) => s.id));
-    const payload = {
-      generated_at: new Date().toISOString(),
-      disclaimer:
-        "Counts are estimates; sample records are simulated. Attendance is manually confirmed.",
-      sessions: list,
-      analyses: analyses.filter((a) => ids.has(a.session_id)),
-      recommendations: recommendations.filter((r) => ids.has(r.session_id)),
-    };
-    const url = URL.createObjectURL(
-      new Blob([JSON.stringify(payload, null, 2)], {
-        type: "application/json",
-      }),
-    );
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "classroom-insight-report.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
+  const download = async () => {
+    setDownloading(true);
+    setDownloadError("");
+    try {
+      const ids = new Set(list.map((s) => s.id));
+      const attendance = await Promise.all(
+        list.map(async (s) => ({
+          session_id: s.id,
+          ...(await api<{ records: unknown[]; changes: AttendanceChange[] }>(
+            `/sessions/${s.id}/attendance`,
+          )),
+        })),
+      );
+      const payload = {
+        generated_at: new Date().toISOString(),
+        disclaimer:
+          "Counts are estimates; sample records are simulated. Attendance is manually confirmed.",
+        sessions: list,
+        attendance,
+        attendance_history_limit:
+          "Latest 500 changes per session. Face thumbnails excluded.",
+        analyses: analyses
+          .filter((a) => ids.has(a.session_id))
+          .map((a) => ({
+            ...a,
+            result: a.result
+              ? {
+                  ...a.result,
+                  video: a.result.video
+                    ? {
+                        ...a.result.video,
+                        face_tracking: a.result.video.face_tracking
+                          ? {
+                              ...a.result.video.face_tracking,
+                              tracks: a.result.video.face_tracking.tracks.map(
+                                ({ preview: _preview, ...track }) => track,
+                              ),
+                            }
+                          : undefined,
+                      }
+                    : null,
+                }
+              : null,
+          })),
+        recommendations: recommendations.filter((r) => ids.has(r.session_id)),
+      };
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(payload, null, 2)], {
+          type: "application/json",
+        }),
+      );
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "classroom-insight-report.json";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setDownloadError(
+        e instanceof Error ? e.message : "Report download failed.",
+      );
+    } finally {
+      setDownloading(false);
+    }
   };
   return (
     <div className="space-y-6">
@@ -1404,15 +1525,16 @@ export function Reports() {
           <Download size={16} />
           Attendance CSV
         </a>
-        <Button onClick={download}>
+        <Button onClick={() => void download()} disabled={downloading}>
           <Download size={16} />
-          Full report JSON
+          {downloading ? "Preparing report…" : "Full report JSON"}
         </Button>
         <Button variant="primary" onClick={() => window.print()}>
           <FileText size={16} />
           Print / save PDF
         </Button>
       </div>
+      {downloadError && <Alert error>{downloadError}</Alert>}
       <article className="panel p-6 md:p-10">
         <div className="flex justify-between gap-4 border-b border-line pb-6">
           <div>
@@ -1470,6 +1592,19 @@ export function Reports() {
                     ? "All sample media indicators are simulated."
                     : ""}
                 </p>
+                {(() => {
+                  const latest = analyses.find(
+                    (a) => a.session_id === s.id && a.status === "complete",
+                  );
+                  const fusion = latest?.result?.fusion;
+                  return fusion ? (
+                    <p className="subtle text-xs mt-2">
+                      Observable activity index: {fusion.score ?? "unavailable"}
+                      /100 · {fusion.joint_windows} joint windows. Experimental,
+                      not validated engagement. {fusion.method}
+                    </p>
+                  ) : null;
+                })()}
               </div>
             ))}
           </div>
@@ -1504,6 +1639,7 @@ export function Settings() {
   const [detection, setDetection] = useState(
     config.preferences.person_detection,
   );
+  const [faces, setFaces] = useState(config.preferences.face_detection ?? true);
   const [verification, setVerification] = useState("");
   const media = analyses.filter((a) => a.has_media);
   return (
@@ -1574,6 +1710,7 @@ export function Settings() {
                   write("PUT", {
                     sample_seconds: interval,
                     person_detection: detection,
+                    face_detection: faces,
                   }),
                 ),
               "Analysis preferences saved",
@@ -1599,6 +1736,20 @@ export function Settings() {
             />
             Estimate visible people using OpenCV HOG
           </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={faces}
+              onChange={(e) => setFaces(e.target.checked)}
+            />
+            Enable anonymous face observations and local review thumbnails
+          </label>
+          <p className="subtle text-xs">
+            Face tracks are not student identities. Review thumbnails are stored
+            locally with derived metrics and removed when original media is
+            deleted. Attendance requires explicit instructor confirmation. Use a
+            2–10s interval and a short recording for sustained-presence review.
+          </p>
           <p className="subtle text-xs">
             Up to 360 frames per recording. Long recordings use a larger
             interval. HOG often misses seated or occluded people; it is not a

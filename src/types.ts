@@ -1,4 +1,49 @@
 export type AttendanceStatus = "present" | "absent" | "unconfirmed";
+export interface AttendanceChange {
+  id: number;
+  student_id: number;
+  name: string;
+  previous_status: AttendanceStatus;
+  status: AttendanceStatus;
+  recorded_at: string;
+  source: string;
+  actor: string;
+  analysis_id: number | null;
+  track_id: number | null;
+}
+export interface PresenceTrack {
+  id: number;
+  first_seen: number;
+  last_seen: number;
+  samples: number;
+  span_seconds: number;
+  qualified: boolean;
+  preview: string | null;
+  longest_still_seconds: number;
+  mean_motion_face_widths_per_second: number | null;
+  mean_eye_line_roll_degrees: number | null;
+  roll_samples: number;
+}
+export interface ActivityFusion {
+  version: string;
+  label: string;
+  score: number | null;
+  window_seconds: number;
+  joint_windows: number;
+  method: string;
+  limitations: string;
+  audio_offset_seconds: number;
+  points: {
+    seconds: number;
+    end_seconds: number;
+    visual: number | null;
+    sound: number | null;
+    score: number | null;
+    modalities: number;
+    visual_coverage: number;
+    audio_coverage: number;
+  }[];
+}
 export interface Summary {
   present: number;
   absent: number;
@@ -20,6 +65,9 @@ export interface Student {
     title: string;
     date: string;
     status: AttendanceStatus;
+    confirmed_at?: string | null;
+    updated_at?: string | null;
+    source?: string;
   }[];
 }
 export interface Session {
@@ -40,6 +88,7 @@ export interface Point {
   seconds: number;
   count: number | null;
   activity: number | null;
+  faces?: number | null;
 }
 export interface Analysis {
   id: number;
@@ -53,6 +102,8 @@ export interface Analysis {
   created_at: string;
   result: null | {
     kind: string;
+    derived_from?: number[];
+    fusion?: ActivityFusion | null;
     video: null | {
       duration_seconds: number;
       sample_seconds: number;
@@ -61,6 +112,15 @@ export interface Analysis {
       detector: string | null;
       method: string;
       limitations: string;
+      face_tracking?: {
+        method: string;
+        tracks: PresenceTrack[];
+        minimum_seconds: number;
+        minimum_samples: number;
+        eligible_sampling: boolean;
+        limitations: string;
+        pose_method: string;
+      } | null;
     };
     audio: null | {
       duration_seconds: number;
@@ -69,6 +129,10 @@ export interface Analysis {
       threshold: number;
       method: string;
       active_intervals: { start: number; end: number }[];
+      activity_bouts?: number;
+      bouts_per_minute?: number;
+      speech_like_fraction?: number;
+      speech_method?: string;
     };
     unavailable: string[];
     notes: string[];
@@ -106,7 +170,11 @@ export interface Analytics {
 }
 export interface Config {
   gemini: { credential_supplied: boolean; access: string; model: string };
-  preferences: { sample_seconds: number; person_detection: boolean };
+  preferences: {
+    sample_seconds: number;
+    person_detection: boolean;
+    face_detection?: boolean;
+  };
   ffmpeg_available: boolean;
   upload_limit_mb: number;
   retention: string;

@@ -45,7 +45,7 @@ flowchart LR
 ### Main components
 
 - **Application entry and routing:** `src/main.tsx` mounts React and `BrowserRouter`. `src/App.tsx` separates the public `/` route from guarded `/app/*` routes. Legacy dashboard paths redirect under `/app`, preserving query strings.
-- **Public experience:** `src/public/` contains the homepage, illustrative product visuals, login and consultation dialogs, and the readiness form. Switching between example readiness results is local and does not call Gemini.
+- **Public experience:** `src/public/` contains the homepage, illustrative product visuals, login and consultation dialogs, and the readiness form. Switching illustrative session examples is local; readiness generation is a separate explicit backend request.
 - **Dashboard:** `src/Dashboard.tsx` loads shared operational state through `src/api.ts` and exposes it through `src/data.tsx`. `src/pages.tsx` contains the eight dashboard screens.
 - **Charts:** `src/ChartView.tsx` lazy-loads Recharts components from `src/charts.tsx`.
 - **Shared UI:** `src/ui.tsx` provides reusable controls and dialogs. Fonts are bundled locally. Tailwind v4 tokens are defined in `src/styles.css`, with public-page layouts in `src/public/public.css`.
@@ -195,6 +195,27 @@ Creating a session initializes attendance records as unconfirmed. Instructor con
 
 **Media analysis does not modify attendance.** Analysis results and attendance records remain separate data sources.
 
+The submission update adds `backend/observations.py`: frontal-face Haar detection, anonymous IoU tracks, face-box motion, conditional eye-line roll, and timestamp-aligned activity windows. `src/Observations.tsx` presents these results, instructor review, the activity formula/coverage and separate-recording alignment. It never maps tracks to student identity automatically.
+
+```mermaid
+flowchart LR
+    Frames[Sampled frames] --> Faces[Haar face detector]
+    Faces --> Tracks[Conservative anonymous IoU tracks]
+    Tracks --> Review[Original recording + instructor identity review]
+    Review -->|Explicit confirmed roster choice| Attendance[Timestamped attendance + change event]
+    Frames --> Visual[Scene-change intervals]
+    WAV[PCM WAV] --> Sound[Sound-active intervals + acoustic heuristic]
+    Visual --> Fusion[Time-window feature fusion]
+    Sound --> Fusion
+    Offset[Instructor-checked audio offset] --> Fusion
+    Fusion --> Index[Observable activity index + coverage]
+    Index --> Reports[Analytics / reports / advisory rules]
+```
+
+Tracks need >=3 consecutive samples spanning >=20s with sampling <=10s before review can confirm attendance. Missed/ambiguous matches break runs; crossings can still misassociate faces. Protected original playback requires demo access. Face previews are local derived data, excluded from JSON exports and removed with original-media deletion.
+
+Fusion normalizes visual change by 10%, caps it at 100, computes sound-active duration fraction, averages available components per window, then duration-weights window scores. Missing components remain absent. Gaps >1.5 nominal frame intervals are excluded. Separate recordings can be explicitly aligned via `/api/sessions/:id/fusion`, creating a derived analysis with source IDs and offset. No student-level engagement or internal attention score is calculated.
+
 ### Media processing
 
 The analysis worker uses local processing:
@@ -234,6 +255,9 @@ erDiagram
     sessions ||--o{ attendance : "session_id / CASCADE"
     sessions ||--o{ analyses : "session_id / CASCADE"
     sessions ||--o{ recommendations : "session_id / CASCADE"
+    students ||--o{ attendance_changes : "student_id / CASCADE"
+    sessions ||--o{ attendance_changes : "session_id / CASCADE"
+    analyses |o--o{ attendance_changes : "analysis_id / SET NULL"
 
     students {
         INTEGER id PK
@@ -256,6 +280,22 @@ erDiagram
         INTEGER session_id PK, FK "Composite key"
         INTEGER student_id PK, FK "Composite key"
         TEXT status "present, absent, unconfirmed"
+        TEXT confirmed_at "Nullable UTC; unknown for legacy records"
+        TEXT updated_at "Nullable UTC"
+        TEXT source "Default legacy"
+    }
+
+    attendance_changes {
+        INTEGER id PK
+        INTEGER session_id FK
+        INTEGER student_id FK
+        TEXT previous_status
+        TEXT status
+        TEXT recorded_at "UTC"
+        TEXT source
+        INTEGER analysis_id FK "Nullable"
+        INTEGER track_id "Nullable; unique with analysis_id when both present"
+        TEXT actor "Shared Demo instructor; not employee identity"
     }
 
     analyses {
@@ -328,7 +368,7 @@ erDiagram
 - Recommendations reference a session rather than an analysis row. Deleting an analysis can remove that session's saved recommendations through application code.
 - Deleting original media retains analysis measurements. Deleting a session removes associated files through application code and cascades dependent rows through SQLite.
 
-Connections enable foreign keys and use a 15-second SQLite timeout. Initialization uses `CREATE TABLE IF NOT EXISTS` and WAL mode. There is no migration framework or automatically enforced retention policy.
+Connections enable foreign keys and use a 15-second SQLite timeout. Initialization uses `CREATE TABLE IF NOT EXISTS` and WAL mode. `migrate_attendance` detects missing timestamp/source columns, creates a SQLite backup in `data/backups/`, and transactionally adds the missing columns. Legacy timestamps remain null. This is one additive migration, not a general migration framework. There is no automatically enforced retention policy. Attendance history is retained until its student/session is deleted.
 
 Database files, original media, secrets, and generated private artifacts are excluded from Git. Shared example data is explicitly labelled.
 

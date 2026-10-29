@@ -595,7 +595,46 @@ Cells beginning with spreadsheet formula characters are prefixed with an apostro
 
 Full report JSON and browser print/PDF reports are assembled by the frontend from the API results. JSON reports include measurements, saved recommendations, and attendance summaries. CSV exports contain identity-linked individual records.
 
-## 11. Operational and security notes
+## 11. Submission update: attendance evidence and aligned observations
+
+All endpoints below require the existing demo cookie and local Host/Origin checks.
+
+### Attendance timestamps/history
+
+`GET /api/sessions/:id/attendance` adds `confirmed_at`, `updated_at`, and `source` to records, and `changes` (latest 500 events descending). Events include student ID/name, old/new status, UTC `recorded_at`, shared-demo actor, source and optional analysis/track IDs. Legacy timestamps remain null. History cascades on student/session deletion. CSV includes timestamp/source columns; report JSON includes attendance/history and excludes thumbnails.
+
+`PUT /api/sessions/:id/attendance` rejects duplicate student IDs and validates the whole batch before writing. Repeating an already timestamped manual status does not duplicate history. Unconfirmed clears `confirmed_at` and records the change.
+
+### `POST /api/sessions/:id/presence-confirmations`
+
+```json
+{"analysis_id": 1, "track_id": 1, "student_id": 1, "identity_confirmed": true}
+```
+
+Requires a same-session completed non-demo analysis, available original media, a roster student, and a qualified track: >=3 consecutive samples spanning >=20s with sampling <=10s. This instructor action records present with source `instructor_reviewed_track`; detection alone never changes attendance. The boolean is human attestation, not machine identity verification. Success 201; same-track/same-student replay 200 (`duplicate: true`); invalid, cross-session, insufficient or differently assigned tracks return 400. A unique index protects against duplicate review writes.
+
+### `GET /api/analyses/:id/media`
+
+Authenticated, no-store, conditional original-media response. Returns 401 without demo access and 404 after deletion. Browser codecs vary; there is no public media directory.
+
+### `POST /api/sessions/:id/fusion`
+
+```json
+{"video_analysis_id": 1, "audio_analysis_id": 2, "audio_offset_seconds": 0}
+```
+
+Uses distinct completed, non-demo original analyses from the same session. One must provide video and the other audio. Offset is finite between -7200 and 7200 seconds; positive means audio starts later. Non-overlapping/cross-session/derived inputs return 400. Success 201 returns a new analysis ID, preserving originals. The new result records `derived_from`, offset, observations and fusion; face tracks/thumbnails are not duplicated. Instructors must independently check alignment.
+
+### New analysis/preference fields
+
+- `video.points[].faces`: frontal-face detections, capped at 100/frame; null when unavailable. HOG `count` is separate.
+- `video.face_tracking`: anonymous tracks, spans, qualification, box motion, still runs, optional eye-line roll, private JPEG previews and limitations; maximum 100 tracks/analysis.
+- `audio.activity_bouts`, `bouts_per_minute`, `speech_like_fraction`, `speech_method`: acoustic heuristics, not verified speech or speaker turns.
+- `fusion`: versioned observable-activity formula, score, window size, offset, joint windows, and per-window visual/audio coverage. Missing values are null. Not a validated engagement measure.
+- `PUT /api/settings` optionally accepts boolean `face_detection`; omission preserves its setting.
+- Media-only deletion removes original media and face previews while retaining numerical metrics.
+
+## 12. Operational and security notes
 
 - All operational endpoints require the `classroom_demo` cookie. Missing, expired, or revoked sessions return `401 demo_session_required`.
 - The documented installation is local and uses request-origin restrictions rather than permissive CORS.

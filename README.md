@@ -14,6 +14,8 @@ Classroom Insight combines a modern instructor dashboard with local data persist
 
 It is designed as a **single-instructor local demonstration**, not a hosted, multi-tenant institutional service.
 
+**Submission update:** See [Submission Status](docs/SUBMISSION_STATUS.md) for the tested demo path, new face/presence observations, attendance timestamps/history, signal fusion, exact validation results and limitations. [Requirements Audit](docs/REQUIREMENTS_AUDIT.md) distinguishes completed features from partial requirements.
+
 ## Contents
 
 - [Features](#features)
@@ -186,7 +188,7 @@ Keep this terminal running.
 Open a second terminal:
 
 ```powershell
-cd D:\Coding\SkillWallet\Multimodal
+cd D:\Coding\classroom-insight
 npm ci
 npm run dev
 ```
@@ -309,6 +311,10 @@ Aggregate rates use student-session entries rather than unique students. Histori
 
 Anonymous person detection does not automatically mark attendance.
 
+New confirmations record UTC `confirmed_at`, `updated_at` and their source, with per-student status-change history. The first startup after this update makes a SQLite backup under `data/backups/` before adding these fields. Existing status/roster data is preserved; old timestamps remain unknown. Do not replace the database with a sample file.
+
+Analytics now offers **instructor-reviewed sustained presence**: a recording-local anonymous face track must have at least three consecutive sampled detections spanning 20 seconds, with sampling no slower than 10 seconds. The instructor must review the original recording, independently verify the roster student's identity, and explicitly confirm before attendance changes. One frame cannot mark attendance. This is not facial recognition or unattended automatic attendance.
+
 ### Engagement
 
 The system analyzes available observable signals and presents session-level metrics and trends. Camera movement, occlusion, lighting, and audio quality can affect results.
@@ -316,6 +322,10 @@ The system analyzes available observable signals and presents session-level metr
 These signals are imperfect proxies and should not be interpreted as definitive measurements of attention, learning, or student intent.
 
 The system does not implement facial identification, emotion detection, covert recording, or individual attention scoring.
+
+The experimental **observable activity index** aligns video and sound observations into time windows. Visual change is normalized by 10% intensity change and capped at 100; sound is the percentage of available audio duration above the activity threshold. Available components receive equal weight; missing components are excluded and coverage is displayed. The session value is duration-weighted. These choices are transparent heuristics, not calibrated engagement or learning measurements.
+
+When FFmpeg is unavailable, upload a video and a separate PCM WAV of the same lesson to the same session, then use Analytics → **Combine separate video and audio recordings**. Set the audio start offset relative to video and confirm alignment. The original analyses remain intact; a derived analysis records their IDs and offset.
 
 ## Media analysis
 
@@ -344,6 +354,12 @@ Scene change is estimated from the mean absolute grayscale difference between sa
 
 The first sample has no previous frame, so its difference is null. Camera movement and lighting changes can influence the result.
 
+### Face, movement and pose observations
+
+New video analyses can use the bundled OpenCV frontal-face Haar cascade and conservative one-to-one IoU association. Tracks are anonymous and limited to 100 per analysis; missed or ambiguous matches break tracks. The interface includes a frontal-face count chart, observed spans, face-box motion and sampled still runs. Short recordings and a 2–10 second sample interval are recommended for review. Crossing/occluded faces can still cause wrong associations; no tracking-accuracy guarantee is established.
+
+When exactly two eyes are detected, their line angle supplies a rough roll estimate. Full yaw/pitch, calibrated head pose and gaze are unavailable. Stillness is not inattention. Settings can disable face observations. Small review thumbnails remain local in analysis JSON, are excluded from report JSON, and are removed by **Delete original media**. Protected original-media playback requires demo login; browser codec support varies.
+
 ### Audio analysis
 
 Audio processing calculates one-second RMS energy windows and an adaptive activity threshold:
@@ -354,11 +370,15 @@ It produces sound-active intervals and a duration fraction. Charts are downsampl
 
 This is **not speech recognition, transcription, or speaker attribution**.
 
+The update also reports sound-active bout counts and an experimental speech-like fraction based on 30ms RMS, zero crossings and spectral-band energy. Music, tones and noise can match it. It is not a trained speech detector, actual speaker turns or classroom interaction understanding.
+
 ### Jobs and retention
 
 Analysis progress is polled while jobs run. Jobs interrupted by a backend restart are marked failed; delete and upload again to retry.
 
 Settings can delete original media while retaining derived metrics. Sessions can delete the full analysis or the complete session. Media and the database are stored in ignored `data/` and are not served as public files.
+
+Original recordings can be streamed only through the authenticated review endpoint. Deleting original media also removes review thumbnails and disables track-assisted attendance. Deleting a session/student deletes its linked attendance history; this is not an immutable institutional audit ledger.
 
 ## AI capabilities
 

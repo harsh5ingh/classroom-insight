@@ -8,6 +8,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from .db import db, event
+from .observations import FaceObserver, fuse_signals
 
 MAX_DURATION = 7200
 MAX_SAMPLES = 360
@@ -19,6 +20,7 @@ def audio_metrics(path):
         if width not in (1, 2, 4) or not 1 <= channels <= 8 or not 1 <= rate <= 192000 or not 0 < duration <= MAX_DURATION:
             raise ValueError('Use PCM WAV (8, 16 or 32 bit), up to two hours and eight channels.')
         energies = []
+        speechlike_seconds = 0.0
         # Stream one-second windows; no whole-recording allocation.
         for second in range(math.ceil(duration)):
             data = audio.readframes(rate)
@@ -29,6 +31,18 @@ def audio_metrics(path):
             samples = (samples - 128) / 128 if width == 1 else samples / (2 ** (width * 8 - 1))
             energy = float(np.sqrt(np.mean(samples ** 2))) if samples.size else 0.0
             energies.append({'seconds':second, 'energy':round(energy, 6)})
+            mono = samples.reshape(-1,channels).mean(axis=1)
+            frame_size = max(1,round(rate*.03))
+            for offset in range(0,len(mono),frame_size):
+                frame = mono[offset:offset+frame_size]
+                if len(frame)<rate*.02: continue
+                rms = float(np.sqrt(np.mean(frame**2)))
+                crossings = float(np.mean(np.diff(np.signbit(frame))!=0))
+                spectrum = np.abs(np.fft.rfft(frame*np.hanning(len(frame))))**2
+                frequencies = np.fft.rfftfreq(len(frame),1/rate)
+                band = float(spectrum[(frequencies>=100)&(frequencies<=min(3800,rate*.45))].sum()/max(spectrum.sum(),1e-15))
+                if rms>.015 and .02<=crossings<=.35 and band>.65:
+                    speechlike_seconds += len(frame)/rate
     threshold = max(.015, float(np.percentile([r['energy'] for r in energies], 20)) * 2) if energies else .015
     active = [r for r in energies if r['energy'] > threshold]
     intervals = []
@@ -43,7 +57,11 @@ def audio_metrics(path):
     chart = [{'seconds':chunk[0]['seconds'], 'energy':round(float(np.mean([r['energy'] for r in chunk])),6)}
              for i in range(0,len(energies),step) if (chunk := energies[i:i+step])]
     return {'duration_seconds':duration, 'energy':chart, 'active_fraction':round(active_seconds / duration, 4) if duration else 0,
-            'threshold':threshold, 'active_intervals':intervals, 'method':'One-second RMS energy; adaptive threshold. Sound activity, not verified speech.'}
+            'threshold':threshold, 'active_intervals':intervals,
+            'activity_bouts':len(intervals), 'bouts_per_minute':round(len(intervals)*60/duration,2),
+            'speech_like_fraction':round(speechlike_seconds/duration,4),
+            'speech_method':'Experimental 30ms energy, zero-crossing and speech-band heuristic. Tones/music/noise can match; not verified speech, speaker turns or conversation understanding.',
+            'method':'One-second RMS energy; adaptive threshold. Sound activity, not verified speech.'}
 
 def analyze_media(path, prefs, progress):
     suffix = path.suffix.lower()
@@ -71,6 +89,14 @@ def analyze_media(path, prefs, progress):
                 if not math.isfinite(duration) or duration > MAX_DURATION:
                     raise ValueError('Video must be no longer than two hours.')
                 interval = max(prefs['sample_seconds'], duration / MAX_SAMPLES)
+                faces = None
+                if prefs.get('face_detection',True):
+                    try:
+                        faces = FaceObserver(interval)
+                    except (cv2.error,ValueError,AttributeError):
+                        result['unavailable'].append('Face detection unavailable; no face tracking or pose results produced.')
+                else:
+                    result['unavailable'].append('Face observations disabled in analysis preferences.')
                 detector = None
                 if prefs['person_detection']:
                     try:
@@ -102,7 +128,15 @@ def analyze_media(path, prefs, progress):
                         except cv2.error:
                             detector = None
                             result['unavailable'].append('Person estimation failed; scene-change analysis continues. Earlier count estimates may be available.')
-                    points.append({'seconds':round(float(second),1), 'count':count, 'activity':activity})
+                    face_ids = None
+                    if faces:
+                        try:
+                            face_ids = faces.observe(frame,float(second))
+                        except (cv2.error,ValueError):
+                            faces = None
+                            result['unavailable'].append('Face processing failed; face results unavailable for this analysis.')
+                    points.append({'seconds':round(float(second),1), 'count':count, 'activity':activity,
+                                   'faces':faces.last_count if face_ids is not None else None})
                     progress(10 + round((i+1) / len(times) * 75))
                 if not points:
                     raise ValueError('No readable frames were found in this recording.')
@@ -110,6 +144,13 @@ def analyze_media(path, prefs, progress):
                     'points':points, 'detector':'OpenCV HOG + SVM pedestrian detector' if detector else None,
                     'method':'Mean absolute grayscale difference between sampled frames (% of intensity range).',
                     'limitations':'HOG estimates upright visible people and often misses seated or occluded participants. Camera motion and lighting affect scene change. Counts are not attendance.'}
+                result['video']['face_tracking'] = {
+                    'method':'Bundled OpenCV frontal-face Haar cascade; conservative one-to-one IoU tracking. IDs are anonymous and recording-local.',
+                    'tracks':faces.tracker.result(), 'minimum_seconds':20, 'minimum_samples':3,
+                    'eligible_sampling':interval<=10,
+                    'limitations':'At most 100 tracks. Missed/ambiguous detections break tracks. Crossings and occlusion may swap apparent identity; review the original recording. Qualification needs >=3 consecutive detections spanning >=20s and sampling <=10s. This never marks attendance automatically.',
+                    'pose_method':'Eye-line roll only when exactly two eyes are detected. No calibrated yaw/pitch or gaze inference. Motion is face-box displacement; stillness is not inattention.'
+                } if faces else None
             finally:
                 capture.release()
         if wav_path:
@@ -121,6 +162,7 @@ def analyze_media(path, prefs, progress):
                 result['unavailable'].append('Audio track could not be analyzed as PCM WAV.')
         if not result['video'] and not result['audio']:
             raise ValueError('No signals could be decoded. Upload PCM WAV audio, or install FFmpeg for other audio formats.')
+        result['fusion'] = fuse_signals(result['video'],result['audio'])
         progress(95)
         return result
     finally:

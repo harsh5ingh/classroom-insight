@@ -6,6 +6,7 @@ import re
 import secrets
 import sqlite3
 import threading
+import math
 from datetime import date, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -14,7 +15,8 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, request, Response, send_from_directory
 from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
-from .db import db, rows, init_db, now, event, preferences
+from .db import db, rows, init_db, now, event, preferences, record_attendance
+from .observations import fuse_signals
 from .analysis import process_job
 from .recommendations import config_status, verify_model, summarize, generate
 from .portal import register_portal
@@ -142,7 +144,9 @@ def create_app(config=None):
         data = payload()
         if type(data.get('sample_seconds')) is not int or not 2 <= data['sample_seconds'] <= 60 or type(data.get('person_detection')) is not bool:
             raise ValidationError('Sample interval must be 2–60 seconds and person detection must be true or false.')
-        for key in ('sample_seconds','person_detection'):
+        if 'face_detection' in data and type(data['face_detection']) is not bool:
+            raise ValidationError('Face observations must be true or false.')
+        for key in ('sample_seconds','person_detection', *(['face_detection'] if 'face_detection' in data else [])):
             db().execute('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,json.dumps(data[key])))
         db().commit()
         return jsonify(preferences())
@@ -151,7 +155,7 @@ def create_app(config=None):
     def students():
         result = rows('SELECT * FROM students ORDER BY name COLLATE NOCASE')
         for student in result:
-            history = rows('SELECT a.status,s.id session_id,s.title,s.date FROM attendance a JOIN sessions s ON s.id=a.session_id WHERE student_id=? ORDER BY s.date DESC',(student['id'],))
+            history = rows('SELECT a.status,a.confirmed_at,a.updated_at,a.source,s.id session_id,s.title,s.date FROM attendance a JOIN sessions s ON s.id=a.session_id WHERE student_id=? ORDER BY s.date DESC',(student['id'],))
             student['history']=history
             student['rate']=round(sum(r['status']=='present' for r in history)/len(history)*100,1) if history else None
         return jsonify(result)
@@ -219,7 +223,8 @@ def create_app(config=None):
     @app.get('/api/sessions/<int:session_id>/attendance')
     def attendance(session_id):
         existing('sessions',session_id)
-        return jsonify(records=rows('SELECT s.id,s.identifier,s.name,s.cohort,a.status FROM attendance a JOIN students s ON s.id=a.student_id WHERE session_id=? ORDER BY s.name',(session_id,)),summary=attendance_summary(session_id))
+        return jsonify(records=rows('SELECT s.id,s.identifier,s.name,s.cohort,a.status,a.confirmed_at,a.updated_at,a.source FROM attendance a JOIN students s ON s.id=a.student_id WHERE session_id=? ORDER BY s.name',(session_id,)),summary=attendance_summary(session_id),
+                       changes=rows('SELECT c.*,s.name FROM attendance_changes c JOIN students s ON s.id=c.student_id WHERE c.session_id=? ORDER BY c.id DESC LIMIT 500',(session_id,)))
 
     @app.put('/api/sessions/<int:session_id>/attendance')
     def update_attendance(session_id):
@@ -231,10 +236,82 @@ def create_app(config=None):
         for record in updates:
             if not isinstance(record,dict) or type(record.get('student_id')) is not int or record['student_id'] not in roster or record.get('status') not in ('present','absent','unconfirmed'):
                 raise ValidationError('Every attendance entry must reference this session’s roster and a valid status.')
-        db().executemany('UPDATE attendance SET status=? WHERE session_id=? AND student_id=?',[(r['status'],session_id,r['student_id']) for r in updates])
+        if len({r['student_id'] for r in updates})!=len(updates):
+            raise ValidationError('Each student may appear only once per attendance update.')
+        for r in updates:
+            record_attendance(session_id,r['student_id'],r['status'])
         event('Attendance manually confirmed',existing('sessions',session_id)['is_demo'])
         db().commit()
         return jsonify(attendance_summary(session_id))
+
+    @app.post('/api/sessions/<int:session_id>/presence-confirmations')
+    def confirm_presence(session_id):
+        session = existing('sessions',session_id)
+        data = payload()
+        if data.get('identity_confirmed') is not True or any(type(data.get(k)) is not int for k in ('analysis_id','track_id','student_id')):
+            raise ValidationError('Select a roster student and explicitly confirm that you verified their identity in the recording.')
+        analysis = existing('analyses',data['analysis_id'])
+        if analysis['session_id']!=session_id or analysis['status']!='complete' or analysis['is_demo'] or session['is_demo']:
+            raise ValidationError('Use a completed real analysis from this session.')
+        if not analysis['stored_name'] or not (Path(app.config['UPLOAD_FOLDER'])/analysis['stored_name']).is_file():
+            raise ValidationError('Original recording is unavailable for identity review. Use manual attendance instead.')
+        result = json.loads(analysis['result'])
+        tracking = (result.get('video') or {}).get('face_tracking') or {}
+        track = next((t for t in tracking.get('tracks',[]) if t['id']==data['track_id']),None)
+        if not track or not tracking.get('eligible_sampling') or not track['qualified'] or track['samples']<3 or track['span_seconds']<20:
+            raise ValidationError('This anonymous track does not meet the sustained-presence review threshold.')
+        if not rows('SELECT 1 FROM attendance WHERE session_id=? AND student_id=?',(session_id,data['student_id'])):
+            raise ValidationError('Student must belong to this session roster.')
+        prior = rows('SELECT student_id FROM attendance_changes WHERE analysis_id=? AND track_id=?',(analysis['id'],track['id']))
+        if prior:
+            if prior[0]['student_id']!=data['student_id']:
+                raise ValidationError('This track has already been reviewed for a different student.')
+            return jsonify(summary=attendance_summary(session_id),duplicate=True)
+        record_attendance(session_id,data['student_id'],'present','instructor_reviewed_track',analysis['id'],track['id'])
+        event('Instructor reviewed sustained presence and confirmed a roster student')
+        db().commit()
+        return jsonify(summary=attendance_summary(session_id),duplicate=False),201
+
+    @app.post('/api/sessions/<int:session_id>/fusion')
+    def combine_recordings(session_id):
+        session = existing('sessions',session_id)
+        data = payload()
+        if session['is_demo'] or any(type(data.get(k)) is not int for k in ('video_analysis_id','audio_analysis_id')):
+            raise ValidationError('Choose two completed real recordings from the same session.')
+        offset = data.get('audio_offset_seconds',0)
+        if type(offset) not in (float,int) or not math.isfinite(offset) or abs(offset)>7200:
+            raise ValidationError('Audio offset must be a finite number between -7200 and 7200 seconds.')
+        inputs = [existing('analyses',data[k]) for k in ('video_analysis_id','audio_analysis_id')]
+        if inputs[0]['id']==inputs[1]['id'] or any(a['session_id']!=session_id or a['status']!='complete' or a['is_demo'] for a in inputs):
+            raise ValidationError('Choose different completed recordings from this session.')
+        results = [json.loads(a['result']) for a in inputs]
+        if any(r.get('derived_from') for r in results):
+            raise ValidationError('Combine original recording analyses, not previously combined results.')
+        video,audio = results[0].get('video'),results[1].get('audio')
+        if not video or not audio:
+            raise ValidationError('The selected recordings must supply video observations and audio observations respectively.')
+        fusion = fuse_signals(video,audio,offset)
+        if not fusion or not fusion['joint_windows']:
+            raise ValidationError('These signals do not overlap at this offset. Review alignment.')
+        # Face reviews remain attached to their original analysis, never duplicated.
+        visual = {k:v for k,v in video.items() if k!='face_tracking'}
+        result = {'kind':'measured','video':visual,'audio':audio,'fusion':fusion,'derived_from':[a['id'] for a in inputs],
+                  'unavailable':[], 'notes':['Instructor-supplied time alignment; simultaneous recording is not automatically verified. Audio time-series uses its original recording clock; the combined index uses the supplied offset.']}
+        aid = db().execute("INSERT INTO analyses(session_id,filename,status,progress,result,created_at) VALUES(?,?,'complete',100,?,?)",
+                           (session_id,'Aligned observations · '+str(inputs[0]['id'])+' + '+str(inputs[1]['id']),json.dumps(result),now())).lastrowid
+        event('Timestamp-aligned audio and video observations combined')
+        db().commit()
+        return jsonify(id=aid),201
+
+    @app.get('/api/analyses/<int:analysis_id>/media')
+    def review_media(analysis_id):
+        analysis = existing('analyses',analysis_id)
+        if not analysis['stored_name']:
+            from flask import abort
+            abort(404,description='Original media is unavailable.')
+        response = send_from_directory(app.config['UPLOAD_FOLDER'],analysis['stored_name'],conditional=True)
+        response.headers['Cache-Control']='no-store'
+        return response
 
     @app.post('/api/sessions/<int:session_id>/roster')
     def sync_roster(session_id):
@@ -300,7 +377,11 @@ def create_app(config=None):
         if row['stored_name']:
             (Path(app.config['UPLOAD_FOLDER'])/row['stored_name']).unlink(missing_ok=True)
         if request.args.get('media_only')=='true':
-            db().execute('UPDATE analyses SET stored_name=NULL WHERE id=?',(analysis_id,))
+            result = json.loads(row['result']) if row['result'] else None
+            if result and (result.get('video') or {}).get('face_tracking'):
+                for track in result['video']['face_tracking']['tracks']:
+                    track['preview'] = None
+            db().execute('UPDATE analyses SET stored_name=NULL,result=? WHERE id=?',(json.dumps(result) if result else None,analysis_id))
         else:
             db().execute('DELETE FROM analyses WHERE id=?',(analysis_id,))
             db().execute('DELETE FROM recommendations WHERE session_id=?',(row['session_id'],))
@@ -355,14 +436,14 @@ def create_app(config=None):
     @app.get('/api/export/attendance.csv')
     def export():
         session_id=request.args.get('session_id',type=int)
-        query='SELECT s.date,s.title,t.identifier,t.name,t.cohort,a.status,s.is_demo FROM attendance a JOIN sessions s ON s.id=a.session_id JOIN students t ON t.id=a.student_id'
+        query='SELECT s.date,s.title,t.identifier,t.name,t.cohort,a.status,s.is_demo,a.confirmed_at,a.updated_at,a.source FROM attendance a JOIN sessions s ON s.id=a.session_id JOIN students t ON t.id=a.student_id'
         args=()
         if session_id is not None:
             existing('sessions',session_id)
             query+=' WHERE s.id=?'; args=(session_id,)
         output=io.StringIO(newline='')
         writer=csv.writer(output)
-        writer.writerow(['Date','Session','Student identifier','Student name','Cohort','Status','Demonstration data'])
+        writer.writerow(['Date','Session','Student identifier','Student name','Cohort','Status','Demonstration data','Confirmed at (UTC)','Updated at (UTC)','Source'])
         for row in rows(query+' ORDER BY s.date,t.name',args):
             # Protect spreadsheet consumers against formula injection.
             writer.writerow(["'"+v if isinstance(v,str) and v.startswith(('=','+','-','@','\t','\r','\n')) else v for v in row.values()])
