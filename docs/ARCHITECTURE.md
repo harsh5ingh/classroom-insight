@@ -1,5 +1,38 @@
 # Classroom Insight — Architecture
 
+## Capture extension — 30 October 2026
+
+This extension uses the existing protected API, local worker lock and SQLite tables; **no new migration** is required. Settings are additional validated keys in the existing `settings` table. The prior additive attendance migration/backup remains unchanged.
+
+```mermaid
+flowchart LR
+  U[Instructor authorization and explicit Start] --> B[src/LiveCapture.tsx]
+  B --> C[src/capture.ts LocalCapture]
+  C --> V[Camera: timestamped JPEG snapshots in memory]
+  C --> A[Microphone: mono PCM samples in memory]
+  V --> R[Stop and review; explicit upload]
+  A --> W[pcmWav encoder]
+  W --> R
+  R -->|JPEGs and relative timestamps| E[POST /api/sessions/id/capture]
+  R -->|PCM WAV| M[Existing POST /api/sessions/id/media]
+  E --> K[Validate limits; strip JPEG metadata; private ZIP]
+  K --> J[Existing process_job and shared lock]
+  M --> J
+  J --> CV[backend/capture.py analyze_camera or analysis.py analyze_media]
+  CV --> O[FaceObserver / PresenceTracker / fuse_signals]
+  O --> D[(Existing analyses table: result JSON and preferences)]
+  D --> UI[CameraFrames / PresenceReview / FusionPanel]
+  UI -->|Explicit identity attestation only| AT[Existing guarded attendance confirmation]
+```
+
+`LocalCapture` releases tracks, timers, audio nodes and AudioContext on stop, close, cancellation, device failure and tab hiding. Late permission responses are stopped after disposal. Capture is capped at 120 seconds; camera storage at 60 JPEGs, microphone sample storage at 120 seconds. This is live acquisition followed by batch analysis, not continuous inference. Camera mode does not request microphone permission and does not collect audio. Microphone mode uses a compatibility ScriptProcessor PCM path with silent output; it does not depend on FFmpeg or speech services.
+
+`backend/capture.py::validate_capture` checks bounds, timestamp ordering, JPEG dimensions before decoding and decoder success. The server alone builds ZIP member names; it does not extract caller-provided archives. `analyze_camera` uses actual client-reported elapsed timestamps, so sparse gaps do not establish uninterrupted presence. Original snapshots are individually available only through protected `capture_frame`; ZIPs remain under private uploads and share existing deletion controls. HOG is reserved for the recorded-video path. Camera metadata expressly discloses its limited sampling and unverified clock.
+
+Presence duration, consecutive sample count and still-motion threshold are saved with each new analysis. Defaults are 20s, 3 samples and 0.02 face-widths/s. Review enforces saved settings plus absolute floors (20s/3 samples); changing current settings cannot rewrite earlier evidence. Optional face previews default off. Head pose remains unsupported; two-eye image roll is never presented as a calibrated head-pose estimate.
+
+No camera/microphone media is sent to Gemini. Explicit teaching-recommendation requests may send aggregate metrics through the existing backend provider path. Standard JSON reports exclude face thumbnails; original-media download is a separate authorized operation and includes original images/audio. New source metadata and preferences are included in analysis JSON for provenance.
+
 **Source inspection:** 29 October 2026
 
 This document describes the existing local implementation, not proposed enterprise infrastructure.
@@ -399,3 +432,32 @@ The implementation is intended for local evaluation, not direct institutional de
 - Do not use heuristic classroom-analysis outputs as validated measures of student attention, identity, or educational performance.
 
 Classroom Insight does not, by itself, establish regulatory compliance or production security readiness. Institutional use requires an appropriate authentication and authorization model, secure deployment configuration, a defined data-retention policy, managed backups, monitoring, and independent security and privacy review.
+
+## Provider manager extension — 30 October 2026
+
+`src/AIProviders.tsx` is composed into the existing Settings page. `backend/providers.py` registers guarded settings routes, wraps Windows Credential Manager, owns provider metadata and exclusive activation, and exposes `cloud_json` through `GeminiProvider`/`GroqProvider`. `recommendations.generate` retains deterministic local rules; `readiness.generate_brief` retains its validated product-grounded schema. Existing Gemini compatibility endpoints remain. No new database tables or migration were added.
+
+```mermaid
+sequenceDiagram
+  participant U as Settings
+  participant F as Flask guards
+  participant M as Provider manager
+  participant V as Windows vault
+  participant D as SQLite settings
+  participant P as Selected provider SDK
+  U->>F: Save key (session, Origin, custom header)
+  F->>M: Validated bounded JSON
+  M->>V: Stage new version and read back
+  M->>D: Commit reference and revision (no key)
+  M->>V: Retire old version
+  M-->>U: Masked metadata
+  U->>F: Explicit test
+  F->>M: Rate-limited request
+  M->>V: Resolve managed key (or disclosed env fallback)
+  M->>P: Fixed JSON generation request
+  P-->>M: Actual output
+  M->>D: Record validated outcome if revision unchanged
+  M-->>U: Status + monotonic revision
+```
+
+The single `settings.ai_provider_manager` row stores `active`, revision and per-provider metadata. It is filtered out of analysis preferences. `BEGIN IMMEDIATE` serializes selection changes across SQLite connections. Keys are versioned OS-vault entries, not columns or JSON fields. A vault/database crash is not a distributed atomic transaction; compensating cleanup and its limitations are documented in [AI Provider Security](AI_PROVIDER_SECURITY.md).

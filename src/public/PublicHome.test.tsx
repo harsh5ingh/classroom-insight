@@ -136,7 +136,14 @@ async function login() {
   );
   await userEvent.type(screen.getByLabelText("Password"), "ClassroomDemo!2026");
   await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
-  await screen.findByRole("heading", { name: "A clearer view of learning." });
+  await screen.findByText("Demo access granted");
+  // Login intentionally waits 450 ms, then lazy-loads the dashboard. Give that
+  // transition its own bounded wait instead of the default one-second query.
+  await screen.findByRole(
+    "heading",
+    { name: "A clearer view of learning." },
+    { timeout: 5000 },
+  );
 }
 
 test("public homepage has section anchors and independent illustrative examples", async () => {

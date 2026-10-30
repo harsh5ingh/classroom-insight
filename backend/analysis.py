@@ -21,6 +21,8 @@ def audio_metrics(path):
             raise ValueError('Use PCM WAV (8, 16 or 32 bit), up to two hours and eight channels.')
         energies = []
         speechlike_seconds = 0.0
+        speechlike_intervals=[]
+        speechlike_truncated=False
         # Stream one-second windows; no whole-recording allocation.
         for second in range(math.ceil(duration)):
             data = audio.readframes(rate)
@@ -43,6 +45,12 @@ def audio_metrics(path):
                 band = float(spectrum[(frequencies>=100)&(frequencies<=min(3800,rate*.45))].sum()/max(spectrum.sum(),1e-15))
                 if rms>.015 and .02<=crossings<=.35 and band>.65:
                     speechlike_seconds += len(frame)/rate
+                    start,end=second+offset/rate,second+(offset+len(frame))/rate
+                    if speechlike_intervals and abs(speechlike_intervals[-1]['end']-start)<1e-6:
+                        speechlike_intervals[-1]['end']=end
+                    elif len(speechlike_intervals)<360:
+                        speechlike_intervals.append({'start':start,'end':end})
+                    else: speechlike_truncated=True
     threshold = max(.015, float(np.percentile([r['energy'] for r in energies], 20)) * 2) if energies else .015
     active = [r for r in energies if r['energy'] > threshold]
     intervals = []
@@ -60,6 +68,7 @@ def audio_metrics(path):
             'threshold':threshold, 'active_intervals':intervals,
             'activity_bouts':len(intervals), 'bouts_per_minute':round(len(intervals)*60/duration,2),
             'speech_like_fraction':round(speechlike_seconds/duration,4),
+            'speech_like_intervals':speechlike_intervals,'speech_like_intervals_truncated':speechlike_truncated,
             'speech_method':'Experimental 30ms energy, zero-crossing and speech-band heuristic. Tones/music/noise can match; not verified speech, speaker turns or conversation understanding.',
             'method':'One-second RMS energy; adaptive threshold. Sound activity, not verified speech.'}
 
@@ -92,7 +101,7 @@ def analyze_media(path, prefs, progress):
                 faces = None
                 if prefs.get('face_detection',True):
                     try:
-                        faces = FaceObserver(interval)
+                        faces = FaceObserver(interval,prefs)
                     except (cv2.error,ValueError,AttributeError):
                         result['unavailable'].append('Face detection unavailable; no face tracking or pose results produced.')
                 else:
@@ -146,10 +155,11 @@ def analyze_media(path, prefs, progress):
                     'limitations':'HOG estimates upright visible people and often misses seated or occluded participants. Camera motion and lighting affect scene change. Counts are not attendance.'}
                 result['video']['face_tracking'] = {
                     'method':'Bundled OpenCV frontal-face Haar cascade; conservative one-to-one IoU tracking. IDs are anonymous and recording-local.',
-                    'tracks':faces.tracker.result(), 'minimum_seconds':20, 'minimum_samples':3,
+                    'tracks':faces.tracker.result(), 'minimum_seconds':faces.tracker.minimum, 'minimum_samples':faces.tracker.minimum_samples,
+                    'still_motion_threshold':faces.tracker.still_threshold,
                     'eligible_sampling':interval<=10,
-                    'limitations':'At most 100 tracks. Missed/ambiguous detections break tracks. Crossings and occlusion may swap apparent identity; review the original recording. Qualification needs >=3 consecutive detections spanning >=20s and sampling <=10s. This never marks attendance automatically.',
-                    'pose_method':'Eye-line roll only when exactly two eyes are detected. No calibrated yaw/pitch or gaze inference. Motion is face-box displacement; stillness is not inattention.'
+                    'limitations':'At most 100 tracks. Missed/ambiguous detections break tracks. Crossings and occlusion may swap apparent identity; review original media. Qualification uses the saved minimum duration/sample thresholds and sampling <=10s. This never marks attendance automatically.',
+                    'pose_method':'Head pose unsupported. Eye-line roll is only a 2D image heuristic when two eyes are detected, not a head-pose estimate. No yaw/pitch or gaze inference. Stillness is not inattention.'
                 } if faces else None
             finally:
                 capture.release()
@@ -175,7 +185,12 @@ def process_job(app, analysis_id, path, prefs):
             db().commit()
         try:
             progress(2)
-            result = analyze_media(Path(path), prefs, progress)
+            if Path(path).suffix=='.zip':
+                from .capture import analyze_camera
+                result = analyze_camera(Path(path),prefs,progress)
+            else:
+                result = analyze_media(Path(path), prefs, progress)
+            result['analysis_preferences'] = prefs
             db().execute("UPDATE analyses SET status='complete',progress=100,result=? WHERE id=?", (json.dumps(result),analysis_id))
             event('Recording analysis completed')
         except Exception as exc:

@@ -11,18 +11,18 @@ from datetime import date, timedelta
 from pathlib import Path
 from uuid import uuid4
 from urllib.parse import urlparse
-from dotenv import load_dotenv
+from .environment import load_environment
 from flask import Flask, jsonify, request, Response, send_from_directory
 from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 from .db import db, rows, init_db, now, event, preferences, record_attendance
 from .observations import fuse_signals
 from .analysis import process_job
-from .recommendations import config_status, verify_model, summarize, generate
+from .recommendations import config_status, verify_generation, summarize, generate
 from .portal import register_portal
 
 ROOT = Path(__file__).resolve().parents[1]
-load_dotenv(ROOT / '.env')
+load_environment()
 
 class ValidationError(Exception):
     pass
@@ -111,7 +111,7 @@ def create_app(config=None):
 
     @app.errorhandler(HTTPException)
     def http_error(exc):
-        message = ('Request exceeds the allowed size for this endpoint.' if request.path.startswith(('/api/enquiries','/api/auth','/api/readiness')) else 'File exceeds the 100 MB limit.') if exc.code == 413 else exc.description
+        message = ('Request exceeds the allowed size for this endpoint.' if request.path.startswith(('/api/enquiries','/api/auth','/api/readiness','/api/settings/ai')) else 'File exceeds the 100 MB limit.') if exc.code == 413 else exc.description
         return jsonify(error={'code':exc.name.lower().replace(' ','_'),'message':message}),exc.code
 
     @app.errorhandler(Exception)
@@ -129,15 +129,14 @@ def create_app(config=None):
         import shutil
         return jsonify(gemini=config_status(), preferences=preferences(), ffmpeg_available=bool(shutil.which('ffmpeg')),
                        upload_limit_mb=100, retention='Media and records remain on this computer until explicitly deleted. No automatic expiration.',
-                       privacy='Only aggregate metrics are sent to Gemini, and only when requested. Original media stays local.')
+                       privacy='Only aggregate metrics are sent to the selected cloud provider, and only when requested. Original media stays local.')
 
     @app.post('/api/config/verify-gemini')
     def verify():
-        client, error = verify_model()
-        if client:
-            client.close()
-        return jsonify(access='verified' if client else ('unavailable' if config_status()['credential_supplied'] else 'not_configured'),
-                       message=error or 'Configured model is accessible and supports content generation. Generation quota has not been tested.')
+        from .portal import rate_limit
+        limited=rate_limit('ai_verification',6,60)
+        if limited:return limited
+        return jsonify(verify_generation())
 
     @app.put('/api/settings')
     def settings():
@@ -146,7 +145,15 @@ def create_app(config=None):
             raise ValidationError('Sample interval must be 2–60 seconds and person detection must be true or false.')
         if 'face_detection' in data and type(data['face_detection']) is not bool:
             raise ValidationError('Face observations must be true or false.')
-        for key in ('sample_seconds','person_detection', *(['face_detection'] if 'face_detection' in data else [])):
+        for key,low,high in (('presence_seconds',20,300),('presence_samples',3,30)):
+            if key in data and (type(data[key]) is not int or not low <= data[key] <= high):
+                raise ValidationError(f'{key} must be an integer from {low} to {high}.')
+        if 'still_motion_threshold' in data and (type(data['still_motion_threshold']) not in (int,float) or not math.isfinite(data['still_motion_threshold']) or not .001 <= data['still_motion_threshold'] <= .2):
+            raise ValidationError('Still-motion threshold must be 0.001–0.2 face-widths per second.')
+        if 'retain_face_previews' in data and type(data['retain_face_previews']) is not bool:
+            raise ValidationError('Preview retention must be true or false.')
+        optional=('face_detection','presence_seconds','presence_samples','still_motion_threshold','retain_face_previews')
+        for key in ('sample_seconds','person_detection', *(k for k in optional if k in data)):
             db().execute('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,json.dumps(data[key])))
         db().commit()
         return jsonify(preferences())
@@ -258,7 +265,7 @@ def create_app(config=None):
         result = json.loads(analysis['result'])
         tracking = (result.get('video') or {}).get('face_tracking') or {}
         track = next((t for t in tracking.get('tracks',[]) if t['id']==data['track_id']),None)
-        if not track or not tracking.get('eligible_sampling') or not track['qualified'] or track['samples']<3 or track['span_seconds']<20:
+        if not track or not tracking.get('eligible_sampling') or not track['qualified'] or track['samples']<max(3,tracking.get('minimum_samples',3)) or track['span_seconds']<max(20,tracking.get('minimum_seconds',20)):
             raise ValidationError('This anonymous track does not meet the sustained-presence review threshold.')
         if not rows('SELECT 1 FROM attendance WHERE session_id=? AND student_id=?',(session_id,data['student_id'])):
             raise ValidationError('Student must belong to this session roster.')
@@ -375,7 +382,10 @@ def create_app(config=None):
         if row['status'] in ('queued','processing'):
             raise ValidationError('Wait for processing to finish before deleting media.')
         if row['stored_name']:
-            (Path(app.config['UPLOAD_FOLDER'])/row['stored_name']).unlink(missing_ok=True)
+            try:
+                (Path(app.config['UPLOAD_FOLDER'])/row['stored_name']).unlink(missing_ok=True)
+            except PermissionError:
+                return jsonify(error={'code':'media_in_use','message':'This media file is in use. Close playback or downloads, then retry deletion.'}),409
         if request.args.get('media_only')=='true':
             result = json.loads(row['result']) if row['result'] else None
             if result and (result.get('video') or {}).get('face_tracking'):
@@ -490,6 +500,12 @@ def create_app(config=None):
         if path.startswith('api/'):
             from flask import abort
             abort(404)
+        if path=='favicon.ico':
+            from flask import redirect
+            return redirect('/favicon.svg?v=brand-1',code=302)
+        if path=='favicon.svg' and not (ROOT/'dist'/'favicon.svg').is_file():
+            from flask import abort
+            abort(404,description='Build the frontend to serve the project favicon.')
         target=ROOT/'dist'/path
         if path and target.is_file() and target.resolve().is_relative_to((ROOT/'dist').resolve()):
             return send_from_directory(ROOT/'dist',path)
@@ -497,6 +513,10 @@ def create_app(config=None):
             return send_from_directory(ROOT/'dist','index.html')
         return jsonify(message='Start the React frontend with npm run dev.'),200
     register_portal(app)
+    from .providers import register_providers
+    register_providers(app)
+    from .capture import register_capture
+    register_capture(app,job_lock,ValidationError)
     return app
 
 if __name__=='__main__':

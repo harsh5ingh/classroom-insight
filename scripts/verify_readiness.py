@@ -1,11 +1,9 @@
-"""One explicit real Gemini request with fictional, non-identifying workflow data.
+"""One explicit selected-provider request with fictional workflow data.
 
 Run from the project root. Never prints credentials or provider exception details.
 The generated brief is saved under ignored data/verification/ for local review.
 """
 import json
-import os
-import re
 import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -23,11 +21,8 @@ def main():
             diagnostics['failure_type']=type(cause).__name__ if cause else 'model_access'
             diagnostics['provider_status']=getattr(cause,'code',None)
             if '--diagnose' in sys.argv and cause:
-                message=str(cause)
-                for name,value in os.environ.items():
-                    if value and any(marker in name for marker in ('KEY','TOKEN','SECRET','PASSWORD')):
-                        message=message.replace(value,'[redacted]')
-                diagnostics['diagnostic']=re.sub(r'https?://\S+','[provider URL]',message)[:1200]
+                # Vault secrets need not exist in os.environ; never print raw exceptions.
+                diagnostics['diagnostic']='Provider details omitted; use the safe error code and Settings status.'
             raise
     portal.generate_brief=checked_generate
     response=app.test_client().post('/api/readiness-brief',json={
@@ -41,7 +36,7 @@ def main():
     if response.status_code!=200:
         print(json.dumps({'status':response.status_code,'error':result['error'],**diagnostics},indent=2))
         return 1
-    assert result['source']=='gemini'
+    assert result['source'] in ('gemini','groq')
     assert all(result['brief'][key] for key in ('summary','capabilities','pilot_scope','privacy_considerations','implementation_questions','next_steps','unanswered_questions','limitations'))
     target=Path(__file__).resolve().parents[1]/'data'/'verification'/'readiness-real.json'
     target.parent.mkdir(parents=True,exist_ok=True)

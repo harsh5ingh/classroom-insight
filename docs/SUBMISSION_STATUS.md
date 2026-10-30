@@ -1,6 +1,87 @@
 # Classroom Insight — submission status
 
-Updated 29 October 2026. Project: `D:\Coding\classroom-insight`.
+Updated 30 October 2026. Project: `D:\Coding\classroom-insight`.
+
+## Current capstone handover — October 30
+
+This section supersedes the historical October 29 handover below. The latest authoritative 15-requirement matrix, exact test names, changes still required and limitations are in [REQUIREMENTS_AUDIT.md](REQUIREMENTS_AUDIT.md#capstone-compliance-matrix--30-october-2026). The official brief screenshot and mandatory report template remain unavailable; the project report is not claimed to match that template.
+
+### New since the previous handover
+
+- **Visible live acquisition:** Upload recording → Camera / microphone. Camera captures up to 60 timestamped JPEG snapshots at nominal two-second intervals; microphone produces up to two minutes of mono PCM WAV. Authorization checkbox and explicit Start are required. Stop/review/discard and a separate Upload action keep capture local until chosen. Closing, cancelling, hiding the tab, errors or the time limit release device resources. This is acquisition followed by batch analysis, not continuous live inference or simultaneous live A/V.
+- **Capture backend:** protected `/capture` validates bounds/timestamps/JPEG headers, decodes and strips image metadata before building a private ZIP. Original frames can be reviewed through protected endpoints. Recorded video/audio remain supported. PCM microphone audio needs no FFmpeg. Camera snapshot processing does not use HOG or collect sound.
+- **Configurable presence:** duration 20–300s, samples 3–30, and still-motion threshold 0.001–0.2 face-widths/s. Saved with each analysis, enforced in attendance review, no retroactive changes. Face previews are separately optional and default off; existing retained images are not erased by toggling the setting.
+- **Honest observation scope:** head pose explicitly unsupported; eye-line roll is only a 2D heuristic. Speech-like heuristic intervals are now exposed (first 360, truncation disclosed), without claiming transcription or conversation understanding.
+- **Reliability:** late permission cancellation, device release, empty frames, invalid timestamps/images, capture limits, optional crops, metadata stripping and Windows locked-media deletion are tested. Locked media returns a useful 409 without deleting its record.
+
+### Current verification
+
+- Full backend: **79 passed in 10.98s**; includes actual HTTP media/fusion/fallback/export flow, camera API integration, configurable gates and initialization of a **disposable backup** of the existing database.
+- Full frontend: **43 passed / five files in 17.60s**. Ten capture tests mock hardware/browser APIs; they are not physical-device results. The flaky eight-route test was split into eight independently timed cases, preserving assertions and the original timeout.
+- TypeScript passed. Production build passed: **2,634 modules**, Vite **3.10s**.
+- Synthetic bounded benchmark: **60 blank 640×480 JPEGs in 0.898s**, 331,253-byte archive. Only a small local fixture measurement; not representative classroom latency, accuracy or load capacity.
+- Native browser verification now succeeded on an isolated QA instance/database: homepage/login, fictional session creation, desktop/mobile capture controls, settings persistence after refresh, all eight rendered dashboard routes, sign-out and protected-route behavior. No actual classroom data was used. No camera/microphone access was granted and no physical recording was made. Original-media playback, downloads/print and positive-face review remain manual.
+- Existing screenshots remain historical. New browser views were inspected, but direct screenshot saving was blocked by the browser tool's filesystem permissions; no synthetic or placeholder screenshot was created.
+- Live Gemini generation: **not run in this phase**. Local recommendations and optional provider error/schema tests are verified; a supplied key is not evidence of successful generation.
+- Final provider/catalogue regression rerun: `tests/test_portal.py`, **28 passed in 2.52s**, after the capability description update. Final TypeScript check also passed.
+- Preservation/security: **all 11 original tables and `.env` matched their pre-phase fingerprints after startup**. No new migration, reset, reseed or deletion of existing data. Source/docs/build scan found no configured Gemini or Flask secret values. Private database, environment and QA files remain ignored by Git. `git diff --check` passed.
+- Both normal application endpoints were started from this checkout: Flask at 5000 and Vite at 5173. The disposable 4173 QA server was stopped after verification; its private test database remains ignored. No unrelated process was stopped.
+
+Run these again from the project root if needed (choose a fresh base-temp suffix; pytest clears an existing base-temp directory):
+
+```powershell
+cd D:\Coding\classroom-insight
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
+.\.venv\Scripts\python.exe -B -m pytest -p no:cacheprovider --basetemp=data/capstone-pytest-20261030-final -q
+npm test -- --maxWorkers=1
+node node_modules/typescript/bin/tsc --noEmit --incremental false -p tsconfig.json
+npm run build
+```
+
+### Exact startup and evaluator steps
+
+Backend:
+
+```powershell
+cd D:\Coding\classroom-insight
+.\.venv\Scripts\python.exe -m backend.app
+```
+
+Frontend, separate terminal:
+
+```powershell
+cd D:\Coding\classroom-insight
+npm run dev
+```
+
+The dev URL is `http://127.0.0.1:5173/`. Vite uses `strictPort`: if that port is occupied, inspect the process and reuse it only if it serves this checkout. Do not kill an unrelated server. The simplest submission path is the already built SPA at **`http://127.0.0.1:5000/`**, with Flask alone. Port 4173 was used only for the disposable QA instance, not your main database. No deployed public URL exists.
+
+1. Sign in using the documented demo account (`instructor@classroom.demo` / `ClassroomDemo!2026`, unless locally overridden). Show the explicit Demo Mode label and eight screens.
+2. Use existing sample data for the general walkthrough; never reset it. For new media, create a separate authorized evaluation session and fictional roster. Demonstrate manual confirmation, timestamp/source and history.
+3. In Settings, inspect duration/sample/still-motion thresholds. Defaults are 20s/3 samples; keep a 2–10s recorded-frame interval and a short clip for track review. Leave face-crop retention off unless needed and authorized.
+4. Open Upload recording → Camera / microphone. **You must authorize the people/audio and grant the browser permission yourself.** Use localhost/HTTPS. Camera takes snapshots without audio. Microphone takes audio without images. Capture at least two camera samples; a presence review needs enough consecutive positive detections to meet the configured duration/sample thresholds. Stop, inspect, then explicitly upload; confirm no device indicator remains after stop/close. If permission is denied, the device is busy/missing, or capture fails, use a consented recorded video or PCM WAV.
+5. Inspect source timestamps, original snapshots (when retained), limitations and experimental activity windows. Do not infer identity from track number or eye-line roll. Independently review before explicitly linking any qualified track to a roster student. Camera occlusion/misses can legitimately leave no qualifying track.
+6. Use the existing same-session video/audio fusion workflow with correctly synchronized recordings. Explain the formula/coverage. Generate local advice; optional Gemini is a separate explicit cloud request. Export CSV/JSON and sign out.
+
+### Before submission — prioritized checklist
+
+- **P0:** Obtain the official SkillWallet brief and mandatory report template, then map this report into it. Do not claim full template compliance without comparing them. Keep `.env`, databases, backups and captured media private; do not publish the demo login as production security.
+- **P1:** Perform an authorized real camera and microphone test on the evaluator's browser; use a consented short frontal-face video and synchronized PCM WAV as a fallback. Check permissions, release indicators, original review and export/print manually. Real positive-face accuracy is not yet established.
+- **P1:** Show honest limitations: head pose and ASR unsupported; anonymous tracking is not recognition; activity is not attention; no individual engagement score. Snapshot capture is not a continuous live stream analyzer.
+- **P2:** If demonstrating Gemini, verify a real generation with non-sensitive aggregate/sample information and report actual provider errors. No key is required for local suggestions. Do not put credentials in Vite or screenshots.
+- **P2:** Capture fresh desktop/mobile screenshots manually if needed. Existing gallery images predate these additions. Add hardware/recording evidence and real-world performance only after executing those checks.
+
+### Files in this phase
+
+New: `backend/capture.py`, `src/capture.ts`, `src/LiveCapture.tsx`, `src/capture.test.tsx`, `tests/test_capture.py`.
+
+Modified: `backend/analysis.py`, `backend/app.py`, `backend/db.py`, `backend/observations.py`, `backend/capabilities.json`, `src/forms.tsx`, `src/Observations.tsx`, `src/pages.tsx`, `src/types.ts`, `src/App.test.tsx`, `tests/test_observations.py`, `README.md`, `docs/REQUIREMENTS_AUDIT.md`, `docs/SUBMISSION_STATUS.md`, `docs/API.md`, `docs/ARCHITECTURE.md`, `docs/PROJECT_REPORT.md`.
+
+No package/lockfile/environment changes or new migration. Git was clean at this phase's start. Private test artifacts and rebuilt `dist/` are ignored. No commit, push or deployment. The QA database is separate under `data/capstone-browser-20261030/`; all its records are test-only.
+
+---
+
+## Historical handover — October 29 (superseded where noted above)
 
 The existing application has been extended and tested, not replaced. The original Instructions-tab screenshot was not found; [the requirements audit](REQUIREMENTS_AUDIT.md) maps the requirements that could be recovered and identifies incomplete items. Full compliance and real-world accuracy are not claimed.
 
@@ -119,3 +200,32 @@ Modified:
 - `docs/REQUIREMENTS_AUDIT.md` (already untracked before this phase; its historical audit was preserved)
 
 Ignored generated effects: rebuilt `dist/` and TypeScript build information, isolated test media/databases under `data/submission-pytest-*`, and the preserving application-schema migration/backup above. Dependency manifests, lockfiles, existing tests and environment configuration were not changed.
+
+## AI Provider Manager — 30 October 2026
+
+Added the two-provider Settings workflow, Windows Credential Manager storage, single persisted provider activation, real generation tests, safe errors, Groq model discovery, and unified recommendations/readiness generation. No original classroom records or `.env` were changed; QA uses a separate snapshot and mock-test databases. No schema migration was required.
+
+Run from `D:\Coding\classroom-insight`: install requirements in `.venv`, then `.\.venv\Scripts\python.exe -m backend.app`; in another terminal run `npm run dev`. In Settings, save a key, save a valid model, test, then enable. Both-off selects local recommendations. Existing `.env` Gemini remains disclosed development fallback; it is not automatically migrated.
+
+Real Gemini fixed-prompt generation passed at 16:21:01 IST with HTTP 200 and verified status retained by GET. Real Windows vault lifecycle/switching tests passed with fictional credentials, which were deleted afterward. Groq real generation was not run (no credential/model). New Settings browser checks are pending because the tool denied local browser access. See [security and verification notes](AI_PROVIDER_SECURITY.md) for exact scope and limitations.
+
+### Final checks for the provider-manager phase
+
+Executed from `D:\Coding\classroom-insight` on 30 October 2026:
+
+- `$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; .\.venv\Scripts\python.exe -B -m pytest -p no:cacheprovider --basetemp=data/provider-tests-04 -q` — **112 passed in 16.40s**.
+- `npm test -- --maxWorkers=1` — **51 passed, 6 files**.
+- `node node_modules/typescript/bin/tsc --noEmit --incremental false -p tsconfig.json` — passed.
+- `npm run build` — passed, 2,635 modules transformed.
+- `.\.venv\Scripts\python.exe -m pip check` — no broken requirements.
+- `.\.venv\Scripts\python.exe -B scripts/verify_provider_manager.py --qa-database-confirmed` — real HTTP Gemini generation and real Windows vault lifecycle passed on the disposable QA snapshot. This script must never target an existing production database; it does not migrate the environment key.
+- `git diff --check` — passed (Git emitted line-ending normalization warnings). Configured secret-value scan of changed/untracked files and built assets passed. Original eleven table fingerprints and `.env` hash matched the baseline. No migration, reset, reseed, commit or push.
+- Browser interaction: not executed after access denial. Groq genuine generation: not executed without credentials/model. Neither is counted as passed.
+
+Files changed in this phase (pre-existing unrelated changes retained):
+
+- New: `backend/providers.py`, `src/AIProviders.tsx`, `tests/test_providers.py`, `scripts/verify_provider_manager.py`, `docs/AI_PROVIDER_SECURITY.md`.
+- Updated backend: `backend/app.py`, `backend/db.py`, `backend/portal.py`, `backend/readiness.py`, `backend/recommendations.py`.
+- Updated frontend/tests: `src/pages.tsx`, `src/public/PublicHome.tsx`, `src/public/Readiness.tsx`, `src/App.test.tsx`, `src/gemini.test.tsx`, `tests/test_portal.py`.
+- Updated dependencies/scripts: `requirements.txt`, `requirements.lock.txt`, `scripts/verify_readiness.py`.
+- Updated documentation: `README.md`, `docs/API.md`, `docs/ARCHITECTURE.md`, `docs/REQUIREMENTS_AUDIT.md`, `docs/SUBMISSION_STATUS.md`.

@@ -20,10 +20,11 @@ class PresenceTracker:
     Track IDs are recording-local hypotheses, never identities. Ambiguous matches
     start new tracks instead of guessing. Sparse (>10s) sampling cannot qualify.
     """
-    def __init__(self, sample_seconds, minimum_seconds=20, minimum_samples=3):
+    def __init__(self, sample_seconds, minimum_seconds=20, minimum_samples=3, still_threshold=.02):
         self.interval = sample_seconds
         self.minimum = minimum_seconds
         self.minimum_samples = minimum_samples
+        self.still_threshold = still_threshold
         self.tracks = []
         self.active = []
 
@@ -60,7 +61,7 @@ class PresenceTracker:
                                       box[1]+box[3]/2-old[1]-old[3]/2)
                 speed = distance / max(old[2],1e-9) / dt
                 t['movement'].append(round(speed,4))
-                t['still_seconds'] = t['still_seconds']+dt if speed < .02 else 0
+                t['still_seconds'] = t['still_seconds']+dt if speed < self.still_threshold else 0
                 t['longest_still_seconds'] = max(t['longest_still_seconds'],t['still_seconds'])
             t['samples'] += 1
             t['last_seen'] = second
@@ -83,8 +84,10 @@ class PresenceTracker:
 
 
 class FaceObserver:
-    def __init__(self, interval):
-        self.tracker = PresenceTracker(interval)
+    def __init__(self, interval, prefs=None):
+        prefs = prefs or {}
+        self.retain_previews = prefs.get('retain_face_previews',False)
+        self.tracker = PresenceTracker(interval,prefs.get('presence_seconds',20),prefs.get('presence_samples',3),prefs.get('still_motion_threshold',.02))
         self.last_count = 0
         self.detector = cv2.CascadeClassifier(str(Path(cv2.data.haarcascades)/'haarcascade_frontalface_default.xml'))
         self.eyes = cv2.CascadeClassifier(str(Path(cv2.data.haarcascades)/'haarcascade_eye_tree_eyeglasses.xml'))
@@ -105,8 +108,9 @@ class FaceObserver:
             x,y,bw,bh = map(int,(x,y,bw,bh))
             # One scale for both axes preserves Euclidean motion in face-width units.
             normalized.append((x/gray.shape[1],y/gray.shape[1],bw/gray.shape[1],bh/gray.shape[1]))
-            ok,jpeg = cv2.imencode('.jpg',cv2.resize(image[y:y+bh,x:x+bw],(96,96)),[cv2.IMWRITE_JPEG_QUALITY,65])
-            if ok: previews[i] = base64.b64encode(jpeg).decode('ascii')
+            if self.retain_previews:
+                ok,jpeg = cv2.imencode('.jpg',cv2.resize(image[y:y+bh,x:x+bw],(96,96)),[cv2.IMWRITE_JPEG_QUALITY,65])
+                if ok: previews[i] = base64.b64encode(jpeg).decode('ascii')
             if not self.eyes.empty():
                 eyes = self.eyes.detectMultiScale(gray[y:y+bh//2,x:x+bw],minNeighbors=5,minSize=(8,8))
                 if len(eyes)==2:

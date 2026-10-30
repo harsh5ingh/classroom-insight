@@ -144,7 +144,7 @@ def test_bundled_face_model_executes_without_fabricating_faces():
 
 
 def test_face_observer_tracks_mock_detections_and_roll(monkeypatch):
-    observer=FaceObserver(10)
+    observer=FaceObserver(10,{'retain_face_previews':True})
     class Faces:
         def detectMultiScale(self,*args,**kwargs):return np.array([[40,20,80,80]])
     class Eyes:
@@ -250,6 +250,9 @@ def test_audio_heuristic_is_not_claimed_as_speech_and_tracks_bouts(tmp_path):
     assert 0<=result['speech_like_fraction']<=1
     assert 'not verified speech' in result['speech_method']
     assert result['active_fraction']==.5
+    assert result['speech_like_intervals']
+    assert all(0<=p['start']<p['end']<=result['duration_seconds'] for p in result['speech_like_intervals'])
+    assert result['speech_like_intervals_truncated'] is False
 
 
 def test_new_video_pipeline_returns_face_and_fusion_metadata(tmp_path,monkeypatch):

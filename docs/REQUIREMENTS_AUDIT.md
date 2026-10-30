@@ -1,5 +1,74 @@
 # Classroom Insight — Requirements Audit
 
+## Capstone compliance matrix — 30 October 2026
+
+**Authoritative current reassessment for the 15 requirements in the latest user request.** It supersedes the dated reassessments below where behavior or verification changed. The official SkillWallet Instructions screenshot, original project brief and mandatory report template were not recovered from this repository. The supplied 15 requirements are the available checklist; exact template compliance and unknown additional requirements are not claimed.
+
+Working root verified: `D:\Coding\classroom-insight`. Git was clean at the start of this phase; the previous implementation/audit was already present. No dependency installation or new schema migration was needed. Existing tables/settings architecture was reused. A read-only database/secret-free environment fingerprint baseline was taken before changes. Tests use disposable databases, including initialization of a SQLite backup of the actual database. No test resets the actual database.
+
+Status vocabulary: **verified** means the bounded implementation has direct test/execution evidence, not production suitability or classroom validity. **Implemented but unverified** means implementation exists but the required real device/model validation is missing. **Partial** means a substantive requested behavior or validation is absent. **Missing** means no implementation. Native browser checks below are separate from mocked React tests.
+
+| ID | Requirement | Current implementation / relevant files | Status | Test / direct evidence | Specific remaining work and limitations |
+|---|---|---|---|---|---|
+| SW01 | Define objectives | `README.md`; `docs/PROJECT_REPORT.md` objectives and scope | verified | Documentation inspected against the actual modules and available checklist | Obtain original official brief; current objectives cannot establish unknown rubric compliance. |
+| SW02 | Architecture/workflow | `docs/ARCHITECTURE.md`; `backend/app.py::create_app`; `db.py::SCHEMA`; new capture flow | verified | Source/schema tracing plus HTTP integration and disposable-copy initialization tests | Official report layout/template not available; no multi-tenant/distributed architecture claimed. |
+| SW03 | Live camera and recorded video | `src/capture.ts::LocalCapture`; `LiveCapture.tsx`; `backend/capture.py::capture_upload/analyze_camera`; `analysis.py::analyze_media` | implemented but unverified | Camera lifecycle/contract tests; actual JPEG API processing; existing AVI HTTP worker test; desktop/mobile capture form inspected natively | Actual camera/hardware permission capture not run. Live input is snapshots at nominal 2s, maximum 60/120s, analyzed after explicit upload; not continuous video/live inference. |
+| SW04 | Live microphone and recorded audio | `LocalCapture`, `pcmWav`; existing `/media`, `audio_metrics` | implemented but unverified | PCM header/value and microphone resource tests; real WAV decoder/HTTP tests; microphone selector verified in browser | Actual microphone/hardware capture not run. ScriptProcessor compatibility path; compressed audio/video extraction needs FFmpeg, absent here. No simultaneous live A/V capture. |
+| SW05 | Faces and anonymous tracking | `observations.py::FaceObserver/PresenceTracker`; original and camera analysis paths | implemented but unverified | Bundled detector on blank frames; mocked positive boxes/eyes; ambiguity/gap/cap tests | Need consented labelled real faces, occlusion/crossing tests and accuracy results. Anonymous IDs are not identities or cross-session recognition. |
+| SW06 | Configurable sustained presence | `db.py::preferences`; `app.py::settings/confirm_presence`; `PresenceTracker`; `pages.tsx::Settings` | verified | `test_configurable_thresholds_validation_snapshot_and_presence_guard`; `test_track_configurable_thresholds_and_preview_opt_out`; native setting-save/refresh | Configuration/safety gates verified, physical continuity between snapshots not established. Floors 20s/3 samples; sampling <=10s; actual thresholds recorded per analysis. |
+| SW07 | Attendance timestamps/history | `db.py::record_attendance`; `app.py::update_attendance/confirm_presence/export`; `Observations.tsx::AttendanceHistory` | verified | Existing atomic update, history/CSV, cross-session/duplicate review tests and real HTTP pipeline pass | Times record confirmation, not arrival. Legacy times unknown. Shared demo actor and latest-500-history retrieval remain limitations. |
+| SW08 | Head pose, movement, inactivity where supportable | Box motion/still spans in `PresenceTracker`; low-scene runs in `recommendations.py::summarize` | partial | Geometry/motion/gap tests; current UI explicitly says head pose unsupported | No suitable calibrated head-pose model evaluated; eye-line roll is only a 2D image heuristic. Camera motion and detection jitter confound movement; no attention inference. |
+| SW09 | Audio activity / speech-like intervals | `analysis.py::audio_metrics`; `pages.tsx::AnalysisDetail` | verified | WAV activity tests plus `test_audio_heuristic_is_not_claimed_as_speech_and_tracks_bouts` interval assertions | Verified only as deterministic acoustics on synthetic media. First 360 heuristic intervals retained with truncation flag. No ASR, learned VAD, speaker identity or verified conversation turns. |
+| SW10 | Timestamp-aligned fusion | `observations.py::fuse_signals`; `app.py::combine_recordings`; `Observations.tsx::FusionForm/FusionPanel` | verified | Gap/offset/non-overlap/cross-session tests and real HTTP upload/fusion integration | Alignment is user-supplied; clock accuracy and real synchronized recordings remain unvalidated. Missing signals remain null, not zero. |
+| SW11 | Transparent activity scores/trends | Versioned formula, coverage windows, charts, settings snapshot and report metadata | verified | Formula/missing-signal tests; analytics HTTP; native Analytics route renders | 10% visual normalization is an uncalibrated heuristic. No validated engagement or individual attention/learning score. |
+| SW12 | Context-aware suggestions from results | `recommendations.py::summarize/local_rules/generate`; capability catalogue | verified | Real HTTP local fallback and existing rule/provider-error tests | Verified local path and mocked optional provider path; live Gemini generation not rerun this phase. It is optional and explicitly cloud-based. |
+| SW13 | Dashboard / attendance / observations / reports | Eight existing routes in `Dashboard.tsx/pages.tsx`; new `CameraFrames` and capture tab | verified | All eight native browser routes rendered; React tests; CSV HTTP and JSON thumbnail-exclusion tests | Native print/download and positive-face review end-to-end remain unverified. Capture review uses original snapshots, not invented identities. |
+| SW14 | Local processing/storage, disclosed optional cloud | Existing Flask/SQLite/private uploads, `portal.py` access guards, local fallback | verified | Authenticated frame retrieval/deletion tests, privacy/export tests, offline HTTP fallback; native config disclosure | No automatic retention/encryption or institutional auth; backups retain data until managed. Gemini requests require network; no fully offline claim with cloud enabled. |
+| SW15 | Correctness/reliability/privacy/performance tests | Four backend test files; five frontend test files; actual HTTP integration and disposable-copy/browser QA | partial | 79 pytest cases, 43 frontend cases, tsc/build; 60 synthetic frames benchmark | No real classroom accuracy, real camera/mic, all-codec, concurrent load, multi-hour memory, screen-reader or production security validation. |
+
+### Exact new evidence mapping
+
+`tests/test_capture.py`:
+
+- `test_camera_capture_end_to_end_frames_privacy_and_deletion`: multipart JPEGs → stored ZIP → real OpenCV analysis → authenticated frame retrieval → media-only deletion, in an isolated Flask test client. No browser camera hardware is involved.
+- `test_camera_rejects_invalid_timestamps_without_persistence` (seven parameter cases): counts, ordering, bool/NaN, start offset and duration limits; no analysis row written on invalid input.
+- `test_camera_rejects_empty_corrupt_oversize_and_unconsented_frames`: JPEG validity/dimensions/size and consent; lock released so a later valid request succeeds.
+- `test_configurable_thresholds_validation_snapshot_and_presence_guard`: atomic settings validation, per-analysis thresholds and rejection of a contradictory qualified flag below those thresholds.
+- `test_track_configurable_thresholds_and_preview_opt_out`: configurable eligibility and no retained crop by default.
+- `test_camera_strips_embedded_metadata_and_locked_media_is_recoverable`: re-encoding removes extra embedded bytes; locked-media deletion returns 409 and preserves original records/media.
+- `test_sixty_frame_capture_resource_bounds`: actual local detector/scene/fusion execution on 60 synthetic 640×480 JPEGs; verifies bounded output. Not an accuracy or concurrent-load benchmark.
+- `test_existing_database_copy_initializes_without_changing_records`: uses SQLite backup from a read-only connection, initializes only its disposable copy, compares all copied table rows. The original database is never initialized or migrated by this test.
+
+`src/capture.test.tsx` exact tests: `PCM encoding preserves real sample values in a valid mono WAV header`; `camera snapshots use elapsed timestamps and stop every media track`; `camera auto-stop limits capture to sixty frames and releases hardware`; `cancelled permission request stops a stream that resolves after disposal`; `empty camera frames release resources and expose an error`; `insecure and denied device access provide useful errors without uploads`; `microphone produces PCM audio without monitoring and closes audio resources`; `capture UI requires authorization and reports permission denial`; `capture UI unmount cancels outstanding permission and releases late stream`; `reviewed camera capture uploads once through the real form contract`. MediaStream, canvas, AudioContext and permissions are mocks. They establish lifecycle/form behavior, not physical device success.
+
+`src/App.test.tsx` now uses `navigation opens %s` for eight independently timed routes. The old single test's eight DOM transitions intermittently exceeded its 5-second budget on this machine. All route assertions were retained; no timeout was increased. The settings case additionally asserts honest missing-key text. Existing API/portal/observations/form/public tests remain in the full suites; the positive crop fixture now explicitly opts in to preview retention.
+
+### Current executed results
+
+From `D:\Coding\classroom-insight`:
+
+```powershell
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
+.\.venv\Scripts\python.exe -B -m pytest -p no:cacheprovider --basetemp=data/capstone-pytest-20261030-final -q
+npm test -- --maxWorkers=1
+node node_modules/typescript/bin/tsc --noEmit --incremental false -p tsconfig.json
+npm run build
+```
+
+- Backend: **79 passed in 10.98s**, no skips reported, including initialization of the actual-database disposable copy and the existing actual HTTP asynchronous pipeline.
+- Frontend: **43 passed across five files in 17.60s** after route-test isolation. Earlier run: 35 passed/1 timeout; the cause and targeted correction are described above.
+- TypeScript: passed, exit 0. Build: passed; 2,634 modules, Vite 3.10s.
+- Bounded benchmark: `.\.venv\Scripts\python.exe -B -m pytest -p no:cacheprovider --basetemp=data/capstone-benchmark-20261030 tests/test_capture.py::test_sixty_frame_capture_resource_bounds -q -s`: **1 passed in 1.48s**; 60 synthetic 640×480 JPEG frames processed in **0.898s**, input archive **331,253 bytes**. This unusually simple imagery is not representative classroom performance.
+- Browser: authorized IAB on a fresh private QA database at port 4173. Verified public homepage, login, creation of one fictional session, capture tab, camera/microphone mode controls at desktop 1440×1000 and mobile 390×844, persisted 30s/4-sample settings after refresh, all eight rendered routes, sign-out and protected-route return to login. No original classroom data was used or changed. An initial immediate snapshot during navigation was stale; final route checks awaited each rendered heading.
+- Hardware permission grants, real recording, live Gemini, native print/download, screen reader and real-world accuracy: **Not run in this phase**. Browser screenshots were visually inspected, but saving a new screenshot into the checkout through the browser tool was denied (`EPERM`); no placeholder image is embedded. Existing gallery images are historical.
+- Final targeted catalogue/provider regression: `tests/test_portal.py` **28 passed in 2.52s**, after catalogue edits; final TypeScript check passed. After normal startup, all **11 original tables and `.env`** matched their pre-phase fingerprints. Source/docs/build scan found no configured Gemini/Flask secret values. Git whitespace checks passed; no commit/push. Normal Flask/Vite processes were started from the requested checkout; the disposable browser-QA process was stopped.
+
+### Remaining priorities
+
+**P0:** preserve explicit human identity review and demo-only access boundary. Do not deploy this shared demo account for real institutions. **P1:** obtain the official brief/template; perform authorized real-device capture and positive-face/continuity validation; supply a consented demo recording. Genuine head pose/ASR require suitable evaluated models and are not replaced with heuristics. **P2:** real-world accuracy, codec/platform matrix, long-run/concurrent resource tests, history pagination and actual print/download/accessibility checks. **P3:** refine threshold calibration and detector selection from labelled data, not from desired demo outcomes. No large rewrite is prescribed.
+
+The 29 October material below is historical. In particular, its browser-blocked statements and 65/26 totals are superseded by the current results above. Its original schema-change preservation evidence remains useful; this phase adds no migration.
+
 ## Submission reassessment — 29 October 2026
 
 **This reassessment is the current state.** The original pre-implementation audit is retained below as a historical appendix; its classifications, execution restrictions and “Not run” statements describe that earlier audit, not this implementation phase. The current user request authorized source/test changes and a necessary, preserving schema update. This is not a claim that the original assignment is fully complete.
@@ -700,3 +769,12 @@ The absent Instructions screenshot prevents exhaustive original-requirement cert
 - Of 237 baseline files, 235 retained identical content hashes. All existing application source, tests, configuration/environment, database/data, documentation, build artifacts and the Git index were unchanged. The only added file was this audit.
 - Two Git metadata files changed during the audit: `.git/FETCH_HEAD` and `.git/logs/refs/remotes/origin/HEAD`. No audit command fetched, committed, pushed, modified Git configuration, or wrote those files. Their external provenance was not investigated, and they were not reverted. This metadata observation is distinct from the clean tracked working tree.
 - This audit is the only file intentionally created or modified by the task. No records were created, deleted, reseeded or migrated; no real Gemini request was made. The exact destination was checked before writing and the UTF-8 file was read back successfully.
+
+## AI Provider Manager follow-up — 30 October 2026
+
+This scoped extension supersedes Gemini-only configuration descriptions; it does not change earlier computer-vision validation limits.
+
+- **Implemented and verified (backend/API):** Windows vault save/read-back/replace/delete with no plaintext fallback; fixed masking; existing environment fallback with Settings precedence; single atomic active provider; restart persistence; strict settings Origin/custom-header/session/size/rate checks; real Gemini JSON verification; safe errors; local recommendation fallback. Evidence: `backend/providers.py`, `tests/test_providers.py`, `scripts/verify_provider_manager.py`, and [security evidence](AI_PROVIDER_SECURITY.md). Real vault HTTP tests used fictional keys and an isolated database.
+- **Implemented and verified with mocked SDKs only:** Groq account discovery and JSON generation, error handling and recommendation source selection. No Groq credential/model was available for a genuine account check.
+- **Implemented but not fully verified:** React provider controls, input clearing, confirmation, stale-response prevention and refresh behavior pass rendered component tests; browser visual, keyboard and responsive checks remain blocked by the session's local-browser permission. Previous Gemini-only browser screenshots do not verify this redesign.
+- **Explicit limitation:** demo authentication is not multi-user authorization, OS-vault/database crash reconciliation is not fully atomic, and readiness synthesis remains cloud-dependent. Public deployment requires the controls listed in `docs/AI_PROVIDER_SECURITY.md`.

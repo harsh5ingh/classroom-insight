@@ -103,6 +103,8 @@ export interface Analysis {
   result: null | {
     kind: string;
     derived_from?: number[];
+    source?: { kind: string; frame_seconds: number[]; clock: string };
+    analysis_preferences?: Record<string, unknown>;
     fusion?: ActivityFusion | null;
     video: null | {
       duration_seconds: number;
@@ -117,6 +119,7 @@ export interface Analysis {
         tracks: PresenceTrack[];
         minimum_seconds: number;
         minimum_samples: number;
+        still_motion_threshold?: number;
         eligible_sampling: boolean;
         limitations: string;
         pose_method: string;
@@ -132,6 +135,8 @@ export interface Analysis {
       activity_bouts?: number;
       bouts_per_minute?: number;
       speech_like_fraction?: number;
+      speech_like_intervals?: { start: number; end: number }[];
+      speech_like_intervals_truncated?: boolean;
       speech_method?: string;
     };
     unavailable: string[];
@@ -169,11 +174,24 @@ export interface Analytics {
   demo: boolean;
 }
 export interface Config {
-  gemini: { credential_supplied: boolean; access: string; model: string };
+  gemini: {
+    credential_supplied: boolean;
+    access: string;
+    model: string;
+    checked_at?: string | null;
+    message?: string;
+    error_code?: string | null;
+    connection_id?: string;
+    revision?: number;
+  };
   preferences: {
     sample_seconds: number;
     person_detection: boolean;
     face_detection?: boolean;
+    presence_seconds?: number;
+    presence_samples?: number;
+    still_motion_threshold?: number;
+    retain_face_previews?: boolean;
   };
   ffmpeg_available: boolean;
   upload_limit_mb: number;

@@ -18,6 +18,14 @@ It is designed as a **single-instructor local demonstration**, not a hosted, mul
 
 ## Contents
 
+### October 30 capstone update
+
+The **Upload recording → Camera / microphone** tab now provides opt-in browser capture: timestamped camera snapshots (every two seconds, maximum 60) or microphone PCM WAV (maximum two minutes). Preview, stop and explicitly upload for local analysis; closing the form releases the device. Live capture is not continuous live inference, and camera snapshots do not include audio. Device permission/hardware verification remains a manual step; recorded uploads continue to work.
+
+Settings now expose sustained-presence duration/sample thresholds and the still-motion threshold. Face thumbnails are optional and **off by default for new analyses**. Existing images are not erased by changing the preference. Genuine head pose is unsupported; eye-line roll is a separate 2D image heuristic, not a pose estimate. Reports retain analysis preferences/provenance and exclude thumbnails.
+
+Latest verification: **79 backend tests; 43 frontend tests; TypeScript and production build passed**. Browser login, session creation, mobile/desktop capture controls and setting persistence were verified on an isolated database. See [the current 15-requirement matrix](docs/REQUIREMENTS_AUDIT.md#capstone-compliance-matrix--30-october-2026) and [submission guide](docs/SUBMISSION_STATUS.md). The official SkillWallet brief screenshot/report template remain unavailable; the Markdown report does not claim to satisfy that template.
+
 - [Features](#features)
 - [Product screenshots](#product-screenshots)
 - [Technology stack](#technology-stack)
@@ -394,7 +402,21 @@ FLASK_SECRET_KEY=replace_with_a_random_secret
 
 Restart Flask after configuration changes.
 
-The application distinguishes unconfigured or unverified access from verified model access. A model-access check does not guarantee available generation quota.
+The root `.env` is resolved relative to `backend/environment.py`, regardless of the launch directory. Existing deployment environment variables are never overwritten. `GOOGLE_API_KEY` is accepted as an alternative; use one key variable. When both are supplied at the same level, this application's explicit client configuration prefers `GEMINI_API_KEY`. An already supplied deployment key takes precedence over either key alias in the local file. Never use a `VITE_*` variable for a secret.
+
+In **Settings → Gemini connection**, select **Verify Gemini generation**. This authenticated, explicit action checks the configured model and makes a small real generation request with a fixed test prompt, then validates the response. No classroom data is sent. The four states are **Not configured**, **Configured · not verified**, **Verified successfully**, and **Verification failed**. Settings refreshes after the request and shows its timestamp and safe diagnostic. Merely opening Settings does not call Gemini.
+
+The result is retained in the running Flask application, never in the database. Refreshing the page retains it; restarting Flask, changing the effective key/model, or starting another worker requires another check. This is a point-in-time generation test, not a promise of future quota. Missing SDK, rejected credentials, permissions, unavailable models, quota, timeouts and network failures retain the local recommendation fallback. Use the project virtual environment and install `requirements.txt` if the SDK is unavailable.
+
+For rejected keys, check the current [Google API-key guidance](https://ai.google.dev/gemini-api/docs/api-key) and [troubleshooting guide](https://ai.google.dev/gemini-api/docs/troubleshooting): use an AI Studio key supported by the Gemini Developer API, check project/API restrictions and model access, and restart Flask after correcting configuration. Do not paste keys into chat, logs, screenshots or frontend code. Key-prefix heuristics are not used as evidence of authentication; an actual generation request is authoritative.
+
+The browser favicon is `public/favicon.svg`, using the exact existing `src/Brand.tsx` mark. Vite copies it into `dist/favicon.svg`; both Vite and Flask serve `/favicon.svg?v=brand-1` as SVG. Flask redirects the conventional `/favicon.ico` request to this scalable SVG. After updating, restart Flask, run `npm run build` for production, and use **Ctrl+Shift+R** (or **Ctrl+F5**) in Chrome/Edge. If a tab retains an old icon, close and reopen it or test a private window; the versioned favicon URL also avoids the old cache entry.
+
+Repair verification on **30 October 2026 (IST)**: 90 backend tests passed (`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`, Python `-B -m pytest -p no:cacheprovider --basetemp=data/gemini-repair-tests-20261030-01 -q`); 45 frontend tests passed (`npm test -- --maxWorkers=1`); `node node_modules/typescript/bin/tsc --noEmit --incremental false -p tsconfig.json` and `npm run build` passed. Two initial frontend runs hit existing login/route timing limits; the login test now waits for the actual success and delayed redirect, and route tests retain their assertions with a 15-second timeout. These are functional checks, not performance guarantees.
+
+Real authenticated generation passed using the installed `google-genai 2.34.0` and configured `gemini-2.5-flash`. A live HTTP check on an isolated Flask QA database returned `unverified → verified`; subsequent `GET /api/config` retained the timestamp and verified status. No private classroom records were sent. The favicon returned HTTP 200 with SVG content identical to the brand asset on Vite `:5173`, isolated Flask `:4173`, and the existing Flask build at `:5000`. Existing application database table fingerprints and `.env` hash were unchanged. Visual Settings/tab-icon verification was **not completed**: the browser-control tool reported “Local browser use is disabled in Work settings.” After enabling browser access, inspect Settings, click verification, reload, and confirm both the badge and tab icon. Restart the existing Flask process first so it loads the repaired backend; no database migration is required.
+
+Subsequent browser verification on **30 October 2026** supersedes the Settings browser-access limitation above: real clicks at `http://127.0.0.1:5173/app/settings` produced authenticated Gemini generation, retained **Verified successfully** after configuration refresh and full reload, and showed a persistent, actionable failure for a deliberately unavailable model. A stale-configuration response regression was reproduced in a test and fixed. Final checks: **90 backend tests, 49 frontend tests, TypeScript checking and production build passed**. See [Gemini browser investigation](docs/GEMINI_BROWSER_DEBUG.md) for exact HTTP evidence, the console/network-tool limitations, and the distinction between the confirmed race and the earlier intermittent incident. This does not claim a new favicon visual check.
 
 For dashboard recommendations, **Use Gemini if available** explicitly sends aggregate counts, attendance totals, and signal summaries. Student names, identifiers, and media are not included in that request. The backend validates output and falls back to local rules on failures.
 
@@ -505,3 +527,21 @@ The SQLite database is not encrypted by the application. Native media decoders p
 Classroom Insight provides a local instructor workspace with attendance management, analytics, reports, media signal analysis, and optional AI-assisted guidance.
 
 Its current scope is a **local demonstration and evaluation project**. The limitations above should be considered before interpreting its signals as reliable educational measurements or using it with real institutional data.
+
+## AI Provider Manager (30 October 2026)
+
+Settings now manages **Google Gemini** and **Groq** through Windows Credential Manager (`keyring`). This section supersedes the earlier Gemini-only Settings instructions. Keys entered here are never saved in SQLite or browser storage and are never returned by the API. Only one provider can be enabled; disabling both uses local recommendation rules. Verification and provider selection have separate meanings.
+
+1. Sign in and open **Settings → AI providers**. Existing Gemini `.env` access is shown as **Environment credential (development)** and continues until explicitly disabled or replaced. No key is copied automatically.
+2. Enter the desired key, then **Save key**. The input clears. Use **Replace key** to rotate it. This does not change `.env`.
+3. Gemini retains `gemini-2.5-flash`. For Groq, save a key, use **Find available models**, choose a supported text/JSON model, and **Save model**. No Groq model is assumed.
+4. **Test connection** performs real generation, even while inactive. **Enable** selects that provider and disables the other without deleting its key. Selection persists after restart.
+5. **Delete saved key** requires confirmation. Deletion disables that provider and blocks silent reuse of its environment key. A new Settings key can be saved later.
+
+Install/update the backend dependencies with `.\.venv\Scripts\python.exe -m pip install -r requirements.txt` (or the pinned `requirements.lock.txt`). Start Flask with `.\.venv\Scripts\python.exe -m backend.app`; start Vite separately with `npm run dev`, both from `D:\Coding\classroom-insight`. Open http://127.0.0.1:5173/. Windows vault access uses the Windows user running Flask. Other OSes fail closed for managed credential storage.
+
+Existing recommendation requests use the selected provider; `use_gemini` is retained as a compatibility field name. Readiness briefs use the same selected provider and report their actual source. They require cloud access; local recommendation rules remain usable without it. Never expose this demo-authenticated local installation publicly.
+
+See [AI Provider Security](docs/AI_PROVIDER_SECURITY.md) for the threat model, migration, tests, real-service evidence and limitations. Browser testing of the new manager is pending because local browser control was denied in this session. Real Gemini generation and Windows-vault HTTP lifecycle tests passed; real Groq generation was not run because no Groq credential/model was available.
+
+Provider-manager final checks: **112 backend tests, 51 frontend tests, TypeScript and production build passed**. See [Submission Status](docs/SUBMISSION_STATUS.md) for exact commands and the changed-file list.

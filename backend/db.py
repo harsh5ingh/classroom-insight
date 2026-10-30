@@ -66,8 +66,10 @@ def event(message, demo=0):
     db().execute('INSERT INTO events(message,created_at,is_demo) VALUES(?,?,?)', (message, now(), demo))
 
 def preferences():
-    defaults = {'sample_seconds': 10, 'person_detection': True, 'face_detection': True}
-    defaults.update({r['key']: json.loads(r['value']) for r in rows('SELECT * FROM settings')})
+    defaults = {'sample_seconds': 10, 'person_detection': True, 'face_detection': True,
+                'presence_seconds':20, 'presence_samples':3, 'still_motion_threshold':.02,
+                'retain_face_previews':False}
+    defaults.update({r['key']: json.loads(r['value']) for r in rows('SELECT * FROM settings') if r['key'] in defaults})
     return defaults
 
 

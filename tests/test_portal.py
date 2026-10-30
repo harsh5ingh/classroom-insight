@@ -109,30 +109,28 @@ def test_public_config_missing_key_and_readiness_validation(client):
 
 def test_structured_generation_and_authoritative_capabilities(monkeypatch):
     calls=[]
-    class Models:
-        def generate_content(self,**kwargs):
-            calls.append(kwargs)
-            return SimpleNamespace(text=json.dumps(valid_brief()))
-    client=SimpleNamespace(models=Models(),close=lambda:None)
-    monkeypatch.setattr('backend.readiness.verify_model',lambda **_: (client,None))
+    def generation(prompt,schema):
+        calls.append((prompt,schema))
+        return 'gemini',valid_brief()
+    monkeypatch.setattr('backend.readiness.cloud_json',generation)
     result=generate_brief(workflow())
     assert result['source']=='gemini'
     assert result['brief']['capabilities']==[PRODUCT['capabilities']['attendance'],PRODUCT['capabilities']['exports']]
     assert result['brief']['limitations']==PRODUCT['limitations']
-    assert calls[0]['config']['response_json_schema']==Brief.model_json_schema()
-    assert json.loads(calls[0]['contents'])==workflow()
+    assert calls[0][1]==Brief.model_json_schema()
+    assert json.loads(calls[0][0].split('User workflow JSON: ')[1])==workflow()
 
 @pytest.mark.parametrize('bad',[{},dict(valid_brief(),capability_ids=['facial_recognition']),dict(valid_brief(),summary='x'),dict(valid_brief(),secret='unexpected')])
 def test_invalid_model_output_is_never_displayed(monkeypatch,bad):
     client=SimpleNamespace(models=SimpleNamespace(generate_content=lambda **_:SimpleNamespace(text=json.dumps(bad))),close=lambda:None)
-    monkeypatch.setattr('backend.readiness.verify_model',lambda **_: (client,None))
+    monkeypatch.setattr('backend.readiness.cloud_json',lambda *args: ('gemini',bad))
     with pytest.raises(BriefUnavailable):generate_brief(workflow())
 
 def test_quota_failure_sanitized_and_rate_limited(client,monkeypatch):
     class QuotaError(Exception):code=429
-    def fail(**_):raise QuotaError('Sensitive provider request details')
+    def fail(*args,**_):raise QuotaError('Sensitive provider request details')
     provider=SimpleNamespace(models=SimpleNamespace(generate_content=fail),close=lambda:None)
-    monkeypatch.setattr('backend.readiness.verify_model',lambda **_: (provider,None))
+    monkeypatch.setattr('backend.readiness.cloud_json',fail)
     response=client.post('/api/readiness-brief',json=workflow())
     assert response.status_code==429 and response.json['error']['code']=='provider_quota'
     assert 'Sensitive' not in response.text
@@ -148,12 +146,12 @@ def test_database_error_does_not_disclose_details(client,monkeypatch):
 
 @pytest.mark.parametrize('code',[401,403,404,None])
 def test_provider_access_and_timeout_errors_are_transparent(client,monkeypatch,code):
-    def fail(**_):
+    def fail(*args,**_):
         error=TimeoutError('private provider details')
         error.code=code
         raise error
     provider=SimpleNamespace(models=SimpleNamespace(generate_content=fail),close=lambda:None)
-    monkeypatch.setattr('backend.readiness.verify_model',lambda **_: (provider,None))
+    monkeypatch.setattr('backend.readiness.cloud_json',fail)
     result=client.post('/api/readiness-brief',json=workflow())
     assert result.status_code==503
     assert result.json['error']['code']==('provider_access' if code else 'generation_unavailable')

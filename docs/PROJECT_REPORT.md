@@ -1,5 +1,72 @@
 # Project Report — Classroom Insight
 
+## October 30 submission addendum — current implementation and evidence
+
+**Template status:** the official SkillWallet mandatory report template and original Instructions screenshot were not available in the repository. This Markdown document is a technical project report, **not a claim of template compliance**. The latest user-supplied 15-requirement checklist is mapped in [REQUIREMENTS_AUDIT.md](REQUIREMENTS_AUDIT.md#capstone-compliance-matrix--30-october-2026). Earlier sections below describe the original product and must be read with this addendum.
+
+### Objectives and delivered extension
+
+The project supports instructor-controlled attendance and cautious review of observable classroom activity. The final extension adds opt-in camera snapshot and microphone input to the existing recorded-media workflow, configurable sustained-presence thresholds, explicit unsupported-pose reporting, speech-like heuristic intervals and stronger privacy/resource tests. It does not recognize people or score individual attention, emotion, understanding or learning success.
+
+Camera input is 2-second JPEG sampling, capped at 60 frames/120 seconds. Browser monotonic elapsed timestamps are retained; they are not independently verified wall-clock time. Microphone input is a maximum 120 seconds of mono PCM encoded into WAV, without audible monitoring. The browser holds capture in memory until Stop/Review/Upload; there is no automatic upload or cloud request. Capture is stopped and hardware released on close, cancellation, tab hiding, error or limit. Analysis remains asynchronous local batch processing after upload. There is no simultaneous camera/audio recording or continuous online inference in this implementation.
+
+### Implemented workflow and modules
+
+```mermaid
+flowchart TD
+  Consent[Instructor authorization + browser permission] --> Capture[src/capture.ts: camera snapshots OR microphone PCM]
+  Capture --> Review[Stop, review, explicitly upload]
+  Review --> API[Protected Flask capture/media endpoints]
+  API --> Validate[Bounds / timestamps / JPEG sanitization / media validation]
+  Validate --> Private[Private ZIP or original recording]
+  Private --> Worker[Existing local worker]
+  Worker --> Observations[Face tracks / scene change / audio activity]
+  Observations --> Fusion[Timestamp-window fusion with coverage]
+  Fusion --> Database[(SQLite analysis JSON + settings snapshot)]
+  Database --> Dashboard[Analytics and original-media review]
+  Dashboard --> Human[Explicit authorized identity confirmation]
+  Human --> History[Attendance status + UTC timestamp + change history]
+  Database --> Rules[Local suggestions; optional explicit Gemini request]
+  Database --> Export[CSV / numerical JSON / browser print]
+```
+
+New modules are `src/capture.ts`, `src/LiveCapture.tsx` and `backend/capture.py`. Existing `FaceObserver`, `PresenceTracker`, `fuse_signals`, `record_attendance`, worker orchestration, API access guards and dashboard components were extended. New settings use the existing key/value table; no migration was added in this phase. The earlier attendance migration is additive and backs up SQLite before adding timestamp/source columns. Verification additionally initializes a disposable copy of the existing database and compares all copied rows; the actual database is never reset for testing.
+
+### Observation methodology and limitations
+
+Frontal Haar detections are linked with conservative one-to-one IoU matching. Qualification requires the saved duration/sample thresholds, default 20 seconds/three samples, never below those floors, and recording sampling no slower than 10 seconds. Ambiguity/misses/gaps break continuity. Qualification is not identity. Explicit instructor attestation and same-session roster membership are enforced before attendance is written; duplicate/cross-session and insufficient-evidence confirmations are rejected. Attendance timestamps record human confirmation time, not a guessed arrival time.
+
+Movement is face-box displacement in face-widths/second; stillness uses a configurable default 0.02 threshold. **Head pose is unsupported.** Conditional eye-line roll is only 2D image geometry, not yaw/pitch/gaze or a calibrated pose estimate. No reliable model was available/evaluated to justify a stronger claim. Optional face crops are off by default for new analyses. Camera originals are protected JPEGs in a private ZIP; re-encoding removes metadata/trailing payloads.
+
+Audio uses RMS energy and bounded speech-like intervals from energy, zero crossing and spectral-band heuristics. The first 360 heuristic intervals are returned with an explicit truncation flag; the fraction is calculated from all processed samples. These metrics can respond to music, tones or noise. No automatic speech recognition, verified speech VAD, speaker identification or conversation-turn understanding is implemented.
+
+The experimental activity score is the equal mean of available normalized visual change (`min(change / 10%, 1)`) and sound-active duration fraction within aligned windows, scaled to 0–100, followed by duration-weighted averaging. Actual timestamps, missing-signal values and coverage are shown. Separate recordings require instructor-supplied alignment. The formula and 10% scale are uncalibrated heuristics; scores are not validated engagement measurements. They never justify claims about an individual learner's attention or success.
+
+### Actual verification results
+
+- **79 backend tests passed in 10.98s:** original API/auth/enquiry/provider regressions, real HTTP worker integration on synthetic AVI/WAV, camera multipart-to-analysis/frame/delete integration, validation, configured presence guards, timestamp/history/CSV, fusion, fallback, privacy and disposable-copy preservation.
+- **43 frontend tests passed in 17.60s:** five files, including ten mocked-device capture tests, reviewed-upload contract, cancellation/late-permission cleanup, routes, forms, reports and public flows. The old eight-route timeout was corrected by making route cases independent, without dropping checks or raising the timeout.
+- **TypeScript and production build passed:** 2,634 transformed modules; Vite reported 3.10s.
+- **Bounded performance observation:** 60 synthetic blank 640×480 JPEG frames (331,253-byte ZIP) processed in 0.898s; the dedicated test passed in 1.48s. This is not representative classroom performance, concurrency testing or an accuracy result.
+- **Real browser verification:** on a disposable local database, homepage/login, fictional session creation, capture controls at 1440×1000 and 390×844, setting persistence after refresh, all eight routes, sign-out and protected-route behavior succeeded. Devices were not accessed. No real recording, positive-face/browser identity review, native print/download or screen-reader validation was performed.
+- **Optional Gemini:** existing integration is retained and provider error/schema paths are tested with mocks; no fresh live generation in this phase. Local advice was exercised without a key over actual HTTP. Do not equate a supplied key or model availability with a successful generation.
+
+Synthetic fixtures and mocked positive faces/eyes are clearly separate from real classroom validation. There is no labelled evaluation dataset or defensible real-world accuracy/fairness metric. Missing hardware/provider checks are not marked passed. Exact commands and test names are in the linked audit and [SUBMISSION_STATUS.md](SUBMISSION_STATUS.md).
+
+### Submission evidence and references
+
+The existing [screenshot guide](SCREENSHOTS.md) describes historical real-browser gallery assets. New capture views were inspected in the browser, but writing fresh screenshot files through that tool was denied; no placeholder files or fabricated screenshots were added. Capture current screenshots manually if required by the official template.
+
+Primary implementation references: [capture backend](../backend/capture.py), [browser capture lifecycle](../src/capture.ts), [observation algorithms](../backend/observations.py), [audio/video processing](../backend/analysis.py), [capture API tests](../tests/test_capture.py), [device-mock tests](../src/capture.test.tsx), [API contracts](API.md), [architecture/schema](ARCHITECTURE.md). Existing external framework references below provide technology context, not evidence of this project's accuracy or compliance.
+
+### Remaining work before broader deployment
+
+Obtain and match the official report template; perform consented real camera/microphone and positive-face tests; evaluate occlusion, crossings, noisy rooms, codecs and real resource usage; verify native exports/accessibility; replace shared demo authentication before institutional deployment. Genuine pose, ASR or individual engagement require suitable models, defensible definitions and validation rather than renamed heuristics. Local storage is not automatically encrypted/compliant; optional cloud AI requires a network and sends only disclosed aggregates/descriptions.
+
+---
+
+## Original product report (read with the current addendum above)
+
 **Multimodal Attendance & Engagement Agent**
 
 ## 1. Abstract

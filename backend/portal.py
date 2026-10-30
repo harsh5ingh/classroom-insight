@@ -116,8 +116,11 @@ def signed_in():
 @portal.get('/public/config')
 def public_config():
     db().execute('SELECT 1')
+    from .providers import metadata
+    providers=metadata()
+    active=providers['providers'].get(providers['active'],{})
     return jsonify(enquiries_available=True,email_delivery=False,authentication='demo_only',
-                   readiness={'credential_supplied':config_status()['credential_supplied'],'access':config_status()['access']})
+                   readiness={'credential_supplied':active.get('configured',False),'access':active.get('access','not_configured')})
 
 @portal.get('/auth/session')
 def session_status():

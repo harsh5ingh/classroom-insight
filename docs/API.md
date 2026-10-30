@@ -80,7 +80,7 @@ Example response:
 }
 ```
 
-The readiness access value is `unverified` when a credential is supplied and `not_configured` otherwise. The endpoint checks database connectivity, but it does not make a provider request. A configured credential does not mean Gemini access has been verified.
+The readiness access value reflects the running application's Gemini verification state: `not_configured`, `unverified`, `verified`, or `failed`. The endpoint checks database connectivity but makes no provider request. A configured credential alone is never evidence of successful generation.
 
 ### `GET /auth/session`
 
@@ -338,7 +338,7 @@ Reports health information for the local service, including database connectivit
 
 Returns operational configuration information, including:
 
-- Gemini credential-supplied/unverified status and model name.
+- Gemini credential-supplied flag, access state (`not_configured`, `unverified`, `verified`, `failed`), model name, `checked_at` UTC timestamp, safe `message` and `error_code` (nullable).
 - FFmpeg availability.
 - Upload limit.
 - Preferences, retention, and privacy text.
@@ -347,9 +347,13 @@ Credentials are never returned.
 
 ### `POST /config/verify-gemini`
 
-Explicitly requests model-access verification. Returns access status and a message. Local fallback behavior remains available for the existing recommendations service.
+Requires the existing demo session and same-origin mutation protection. Explicitly checks configured model access and requests a small JSON generation with a fixed connection-test prompt. Validates the response before returning `access: "verified"`. No classroom data is transmitted. Uses provider quota. No request body or credentials are accepted from the browser.
 
-This endpoint may contact the configured provider; `GET /config` does not.
+Returns the same Gemini status object as `GET /config`, including timestamp and safe diagnostic. Expected provider failures return HTTP 200 with `access: "failed"`; missing configuration returns `not_configured`. Error codes distinguish `sdk_unavailable`, `invalid_key`, `invalid_request`, `permission_denied`, `model_unavailable`, `quota_exhausted`, `timeout`, `provider_unavailable`, and `invalid_response`. Raw exceptions, URLs, keys and generated verification text are not returned. Concurrent probes are not duplicated; a caller receives the current status and an in-progress message.
+
+`GET /config` never contacts the provider. The in-memory result survives page navigation/refresh but resets on Flask restart or an effective key/model change; each application worker has independent state. Settings explicitly refreshes after verification. Local rule recommendations remain available. The root `.env` loader preserves deployment values and supports `GOOGLE_API_KEY` as a fallback alias to `GEMINI_API_KEY`; deployment aliases override local-file aliases.
+
+Gemini status also includes `connection_id` (a random, non-secret identifier for this application/configuration lifetime) and `revision` (starts at 0; increases on completed checks/errors). Settings ignores older revisions from the same connection, preventing an in-flight pre-verification GET from erasing a completed POST result. A different connection invalidates the old result, including after restart or key/model changes. An old backend response lacking these fields produces an explicit restart/retry error instead of claiming verification from metadata alone. No credential fingerprint is returned.
 
 ### `PUT /settings`
 
@@ -636,6 +640,24 @@ Uses distinct completed, non-demo original analyses from the same session. One m
 
 ## 12. Operational and security notes
 
+### October 30: browser capture and configurable thresholds
+
+`POST /api/sessions/:id/capture` uses the same protected demo cookie, local-origin restrictions and shared analysis lock as recorded uploads. Send multipart fields:
+
+- `consent`: literal `true`, explicit authorization attestation.
+- `timestamps`: JSON array of 2–60 finite numeric elapsed seconds (0–120), first at most 5s, subsequent increments at least 0.5s.
+- `frames`: matching repeated JPEG file fields, each nonempty and <=512 KiB, dimensions 16–960 wide and 16–720 high. Header dimensions are checked before decoding; images are re-encoded to remove metadata/trailing bytes. No caller-supplied filenames or paths are used in storage.
+
+The server writes a private ZIP of numbered JPEGs and timestamps, then queues the existing local worker. 202 returns `{id,status:"queued"}`; validation 400; unknown session 404; shared worker busy 409; oversized request 413. Sample sessions are rejected. Capture timestamps are client-reported elapsed time, not independently verified wall-clock evidence. Arbitrary ZIP uploads are not accepted by the normal media endpoint.
+
+`GET /api/analyses/:id/frames/:index` returns an authenticated, `no-store` JPEG for retained camera captures; missing/out-of-range/deleted frames return 404, unauthenticated requests 401. `/media` downloads the original ZIP. Camera analysis includes `source.kind="browser_camera"`, `source.frame_seconds`, clock limitations, face/scene observations and the existing fusion structure. Camera snapshot processing does not run HOG or record audio. The microphone path uploads actual PCM WAV through the existing `/media` endpoint.
+
+New optional settings (validated atomically, omitted values preserved): `presence_seconds` integer 20–300; `presence_samples` integer 3–30; `still_motion_threshold` finite 0.001–0.2 face-widths/s; `retain_face_previews` boolean, default false. Existing `sample_seconds`, `person_detection`, `face_detection` contracts remain. Each new analysis saves its `analysis_preferences`; track qualification/review enforces that analysis's saved thresholds, with absolute floors of 20s/3 samples. Preference changes do not retroactively qualify tracks or alter attendance.
+
+Audio adds `speech_like_intervals` (at most the first 360 intervals) and `speech_like_intervals_truncated`; the overall fraction still uses all processed samples. These are heuristic time windows, not transcription or verified speech. Head pose is explicitly unsupported.
+
+Deleting an open/locked original file returns structured `409 media_in_use`, retaining the database record and media for a later retry. Media-only deletion otherwise removes the ZIP/original and derived face thumbnails but retains numerical observations. Reports exclude thumbnails; the explicit authenticated original-media download necessarily contains the authorized source images/audio.
+
 - All operational endpoints require the `classroom_demo` cookie. Missing, expired, or revoked sessions return `401 demo_session_required`.
 - The documented installation is local and uses request-origin restrictions rather than permissive CORS.
 - Public configuration does not expose secrets and does not prove that Gemini generation is available.
@@ -646,3 +668,22 @@ Uses distinct completed, non-demo original analyses from the same session. One m
 - The shared demo account does not provide tenant isolation or production-grade authorization.
 
 For implementation details, see [Architecture](ARCHITECTURE.md). For recorded test results and remaining verification gaps, see [Verification](VERIFICATION.md).
+
+## AI Provider Manager — 30 October 2026
+
+`GET /api/settings/ai` returns `{revision, active, providers:{gemini,groq}}`. Each provider includes model, configured/managed booleans, source (`settings`, `environment`, `none`), fixed mask, active boolean, access, checked_at, last_success_at, safe message/error_code. No key or vault identifier is returned. `active` is the single authority; verification does not activate a provider.
+
+Mutations are `POST /api/settings/ai/:provider/:operation` with JSON, a valid employee cookie, an allowed local `Origin`, and `X-Classroom-Settings: 1`. Maximum request: 2,048 bytes. Supported operations:
+
+- `credential`: `{key: "user-entered API key"}` — stage/read-back a Windows vault entry, atomically select its reference, reset verification. No credential is echoed.
+- `activation`: `{enabled: true|false}` — enabling requires a usable credential and atomically replaces the single active provider. Disabling an inactive provider does not disable the other provider.
+- `model`: `{model: "account-model-id"}` — save model and invalidate verification. Actual support is checked during testing.
+- `test`: `{}` — real authenticated JSON generation; returns updated metadata with verified/failed status. A provider rejection is a successful HTTP 200 status envelope containing `access=failed`, never a false success.
+- `models` (Groq): `{}` — authenticated account model list, `{models:[...]}`. Presence on this list does not guarantee text/JSON compatibility.
+- `delete`: `{confirm:true}` — remove vault credential, disable if active, block automatic environment fallback.
+
+Failures are structured: 400 invalid input/missing configuration, 401 missing session, 403 CSRF/origin/host rejection, 409 configuration changed during test, 413 oversized request, 415 wrong content type, 429 local rate limit, 503 unavailable vault. Raw SDK exceptions are not returned. Settings mutations: 30/min; tests/discovery: 6/min, shared with the legacy Gemini verification endpoint.
+
+Persistent revisions prevent stale responses replacing newer UI state. Managed verification metadata persists across restart; environment-backed verification resets to unverified after restart while retaining its historical success time. The legacy `/api/config/verify-gemini` and `/api/config.gemini` compatibility interface remains; the new Settings UI uses `/api/settings/ai` as its authority. Recommendations still accept `use_gemini`, now meaning use the selected cloud provider, and return source `gemini`, `groq`, or `local`. Readiness uses the selected provider and validates the same Brief schema. All cloud failures preserve local operational functionality.
+
+See [AI Provider Security](AI_PROVIDER_SECURITY.md). No schema migration or credential export was introduced.

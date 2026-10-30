@@ -116,7 +116,7 @@ function TrackReview({
             {track.mean_eye_line_roll_degrees == null
               ? "unavailable"
               : `${track.mean_eye_line_roll_degrees}° (${track.roll_samples} samples)`}
-            . Not yaw, pitch or gaze.
+            . Image heuristic only; head pose is unsupported.
           </p>
         </div>
       </div>
@@ -227,6 +227,9 @@ export function PresenceReview({ analysis }: { analysis: Analysis }) {
       />
       <Alert>{tracking.limitations}</Alert>
       <p className="subtle text-xs mt-3">
+        Review threshold saved with this analysis: {tracking.minimum_seconds}s /{" "}
+        {tracking.minimum_samples} consecutive samples. Still-motion threshold:{" "}
+        {tracking.still_motion_threshold ?? 0.02} face-widths/s.{" "}
         {tracking.pose_method} Face thumbnails are private derived data; media
         deletion also removes these thumbnails.
       </p>
@@ -237,26 +240,28 @@ export function PresenceReview({ analysis }: { analysis: Analysis }) {
           shorter recording with a sampling interval of 10 seconds or less.
         </p>
       )}
-      {analysis.has_media && (
-        <details className="mt-4">
-          <summary className="text-forest cursor-pointer">
-            Review original recording locally
-          </summary>
-          <video
-            controls
-            preload="none"
-            className="mt-3 w-full max-h-96 bg-secondary"
-            src={`/api/analyses/${analysis.id}/media`}
-          >
-            Your browser cannot play this format. Review the original file
-            locally before confirming identity.
-          </video>
-          <p className="subtle text-xs mt-2">
-            Some local codecs cannot play in a browser. Review the original file
-            in a compatible local player; never confirm from a thumbnail alone.
-          </p>
-        </details>
-      )}
+      {analysis.has_media &&
+        analysis.result?.source?.kind !== "browser_camera" && (
+          <details className="mt-4">
+            <summary className="text-forest cursor-pointer">
+              Review original recording locally
+            </summary>
+            <video
+              controls
+              preload="none"
+              className="mt-3 w-full max-h-96 bg-secondary"
+              src={`/api/analyses/${analysis.id}/media`}
+            >
+              Your browser cannot play this format. Review the original file
+              locally before confirming identity.
+            </video>
+            <p className="subtle text-xs mt-2">
+              Some local codecs cannot play in a browser. Review the original
+              file in a compatible local player; never confirm from a thumbnail
+              alone.
+            </p>
+          </details>
+        )}
       {!tracking.tracks.length ? (
         <Empty title="No faces detected">
           No identities or attendance were inferred. Frontal Haar detection can
@@ -274,6 +279,63 @@ export function PresenceReview({ analysis }: { analysis: Analysis }) {
             )}
           />
         ))
+      )}
+    </section>
+  );
+}
+
+export function CameraFrames({ analysis }: { analysis: Analysis }) {
+  const [index, setIndex] = useState(0);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setIndex(0);
+    setFailed(false);
+  }, [analysis.id]);
+  const source = analysis.result?.source;
+  if (source?.kind !== "browser_camera") return null;
+  return (
+    <section className="panel p-5 space-y-3">
+      <SectionHead
+        title="Original camera snapshots"
+        description="Sampled images, not continuous video. Identity must be confirmed independently."
+      />
+      <p className="subtle text-xs">{source.clock}</p>
+      {analysis.has_media ? (
+        <>
+          <label className="field">
+            Snapshot timestamp
+            <select
+              value={index}
+              onChange={(e) => {
+                setIndex(Number(e.target.value));
+                setFailed(false);
+              }}
+            >
+              {source.frame_seconds.map((t, i) => (
+                <option key={i} value={i}>
+                  {t.toFixed(2)}s · frame {i + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!failed ? (
+            <img
+              className="max-h-80 w-full object-contain bg-secondary"
+              src={`/api/analyses/${analysis.id}/frames/${index}`}
+              alt={`Original camera snapshot at ${source.frame_seconds[index]?.toFixed(2)} seconds`}
+              onError={() => setFailed(true)}
+            />
+          ) : (
+            <Alert error>
+              Snapshot unavailable. Recheck session access and retained media
+              before confirming identity.
+            </Alert>
+          )}
+        </>
+      ) : (
+        <Alert>
+          Original snapshots were removed. Numerical observations remain.
+        </Alert>
       )}
     </section>
   );

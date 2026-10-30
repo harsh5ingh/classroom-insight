@@ -1,3 +1,4 @@
+import AIProviders from "./AIProviders";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -25,6 +26,7 @@ import {
   PresenceReview,
   FusionPanel,
   FusionForm,
+  CameraFrames,
 } from "./Observations";
 import {
   Alert,
@@ -1020,6 +1022,7 @@ function AnalysisDetail({ analysis }: { analysis: Analysis }) {
       </div>
       {result.fusion && <FusionPanel fusion={result.fusion} />}
       <PresenceReview analysis={analysis} />
+      <CameraFrames key={analysis.id} analysis={analysis} />
       {video?.face_tracking && (
         <section className="panel p-5">
           <SectionHead
@@ -1127,6 +1130,28 @@ function AnalysisDetail({ analysis }: { analysis: Analysis }) {
                     .map((i) => `${i.start.toFixed(0)}–${i.end.toFixed(0)}s`)
                     .join(" · ")}
                 </p>
+              </details>
+            )}
+            {audio.speech_like_intervals && (
+              <details className="mt-3 text-xs">
+                <summary className="cursor-pointer text-forest">
+                  Speech-like heuristic intervals (not recognized speech)
+                </summary>
+                <p>
+                  {audio.speech_like_intervals.length
+                    ? audio.speech_like_intervals
+                        .map(
+                          (i) => `${i.start.toFixed(2)}–${i.end.toFixed(2)}s`,
+                        )
+                        .join(" · ")
+                    : "No intervals met the acoustic heuristic."}
+                </p>
+                {audio.speech_like_intervals_truncated && (
+                  <p>
+                    First 360 intervals shown; fraction uses all processed
+                    samples.
+                  </p>
+                )}
               </details>
             )}
           </section>
@@ -1359,10 +1384,10 @@ export function Recommendations() {
             checked={gemini}
             onChange={(e) => setGemini(e.target.checked)}
           />
-          Use Gemini if available (send aggregate metrics only)
+          Use active AI provider if available (send aggregate metrics only)
         </label>
         <p className="subtle text-xs mt-2">
-          Local rules work without a key. Gemini availability is verified when
+          Local rules work without a key. Cloud availability is verified when
           requested; failures fall back to local rules.
         </p>
       </div>
@@ -1395,7 +1420,12 @@ export function Recommendations() {
                   </p>
                 </div>
                 <Badge green={r.source === "local"}>
-                  {r.source === "gemini" ? "Gemini" : "Local rules"} · Advisory
+                  {r.source === "gemini"
+                    ? "Gemini"
+                    : r.source === "groq"
+                      ? "Groq"
+                      : "Local rules"}{" "}
+                  · Advisory
                 </Badge>
               </div>
               <div className="grid md:grid-cols-2 gap-6">
@@ -1640,7 +1670,18 @@ export function Settings() {
     config.preferences.person_detection,
   );
   const [faces, setFaces] = useState(config.preferences.face_detection ?? true);
-  const [verification, setVerification] = useState("");
+  const [presenceSeconds, setPresenceSeconds] = useState(
+    config.preferences.presence_seconds ?? 20,
+  );
+  const [presenceSamples, setPresenceSamples] = useState(
+    config.preferences.presence_samples ?? 3,
+  );
+  const [stillThreshold, setStillThreshold] = useState(
+    config.preferences.still_motion_threshold ?? 0.02,
+  );
+  const [previews, setPreviews] = useState(
+    config.preferences.retain_face_previews ?? false,
+  );
   const media = analyses.filter((a) => a.has_media);
   return (
     <div className="space-y-8">
@@ -1648,52 +1689,7 @@ export function Settings() {
         title="Your classroom. Your controls."
         description="Local storage, transparent processing, and optional AI assistance."
       />
-      <section className="grid md:grid-cols-[240px_1fr] gap-6 border-b border-line pb-8">
-        <div>
-          <h2>Gemini connection</h2>
-          <p className="subtle text-xs mt-2">Optional cloud recommendations</p>
-        </div>
-        <div className="panel p-6 space-y-4">
-          <div className="flex justify-between gap-4">
-            <div>
-              <h3>{config.gemini.model}</h3>
-              <p className="subtle text-xs mt-1">
-                {config.gemini.credential_supplied
-                  ? "Credential supplied; API access is unverified."
-                  : "No credential supplied. Local rules are available."}
-              </p>
-            </div>
-            <Badge>
-              {config.gemini.access === "not_configured"
-                ? "Not configured"
-                : "Unverified"}
-            </Badge>
-          </div>
-          <p className="subtle">
-            Set GEMINI_API_KEY and GEMINI_MODEL in the root .env file, then
-            restart Flask. Credentials never enter the browser.
-          </p>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              run(async () => {
-                const result = await api<{ message: string }>(
-                  "/config/verify-gemini",
-                  write("POST"),
-                );
-                setVerification(result.message);
-              }, "Connection check finished")
-            }
-          >
-            Verify model access
-          </Button>
-          {verification && <Alert>{verification}</Alert>}
-          <p className="text-xs text-muted">
-            Verification checks model access, not generation quota. Requests
-            send validated aggregate metrics only.
-          </p>
-        </div>
-      </section>
+      <AIProviders />
       <section className="grid md:grid-cols-[240px_1fr] gap-6 border-b border-line pb-8">
         <div>
           <h2>Analysis preferences</h2>
@@ -1711,6 +1707,10 @@ export function Settings() {
                     sample_seconds: interval,
                     person_detection: detection,
                     face_detection: faces,
+                    presence_seconds: presenceSeconds,
+                    presence_samples: presenceSamples,
+                    still_motion_threshold: stillThreshold,
+                    retain_face_previews: previews,
                   }),
                 ),
               "Analysis preferences saved",
@@ -1742,13 +1742,64 @@ export function Settings() {
               checked={faces}
               onChange={(e) => setFaces(e.target.checked)}
             />
-            Enable anonymous face observations and local review thumbnails
+            Enable anonymous face observations
+          </label>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label className="field">
+              Minimum presence span (seconds)
+              <input
+                required
+                type="number"
+                min={20}
+                max={300}
+                step={1}
+                value={presenceSeconds}
+                onChange={(e) => setPresenceSeconds(Number(e.target.value))}
+              />
+            </label>
+            <label className="field">
+              Minimum consecutive face samples
+              <input
+                required
+                type="number"
+                min={3}
+                max={30}
+                step={1}
+                value={presenceSamples}
+                onChange={(e) => setPresenceSamples(Number(e.target.value))}
+              />
+            </label>
+            <label className="field">
+              Still-motion threshold (face-widths/s)
+              <input
+                required
+                type="number"
+                min={0.001}
+                max={0.2}
+                step={0.001}
+                value={stillThreshold}
+                onChange={(e) => setStillThreshold(Number(e.target.value))}
+              />
+            </label>
+          </div>
+          <label className="flex gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={previews}
+              onChange={(e) => setPreviews(e.target.checked)}
+            />
+            Retain small face review thumbnails for new analyses (optional; off
+            by default)
           </label>
           <p className="subtle text-xs">
-            Face tracks are not student identities. Review thumbnails are stored
-            locally with derived metrics and removed when original media is
-            deleted. Attendance requires explicit instructor confirmation. Use a
-            2–10s interval and a short recording for sustained-presence review.
+            Face tracks are not student identities. Optional thumbnails are
+            stored locally with derived metrics and removed when original media
+            is deleted. Disabling this preference does not erase prior uploads.
+            Head pose is unsupported; eye-line roll is only a 2D image
+            heuristic. Thresholds apply to future analyses and do not rewrite
+            past attendance. Attendance requires explicit instructor
+            confirmation. Use a 2–10s interval and a short recording for
+            sustained-presence review.
           </p>
           <p className="subtle text-xs">
             Up to 360 frames per recording. Long recordings use a larger

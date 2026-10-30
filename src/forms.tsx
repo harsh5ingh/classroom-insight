@@ -4,6 +4,7 @@ import { api, today, write } from "./api";
 import { useData } from "./data";
 import { Alert, Button, Dialog } from "./ui";
 import type { Session, Student } from "./types";
+import { LiveCapture } from "./LiveCapture";
 
 export function SessionForm({
   onClose,
@@ -179,6 +180,7 @@ export function UploadForm({
   sessionId?: number;
 }) {
   const { sessions, refresh } = useData();
+  const [live, setLive] = useState(false);
   const available = sessions.filter((s) => !s.is_demo);
   const [selected, setSelected] = useState(
     String(sessionId || available[0]?.id || ""),
@@ -245,84 +247,113 @@ export function UploadForm({
         if (progress === null) onClose();
       }}
     >
-      <form onSubmit={submit} className="space-y-5">
-        <Alert>
-          Original media stays on this computer. Confirm that you have
-          permission to analyze this classroom recording.
-        </Alert>
-        {available.length ? (
-          <>
-            <label className="field">
-              Session
-              <select
-                value={selected}
-                onChange={(e) => setSelected(e.target.value)}
-                disabled={progress !== null}
-              >
-                {available.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block border border-dashed border-forest/40 bg-sage/25 rounded-lg p-7 text-center">
-              <UploadCloud size={28} className="mx-auto text-forest mb-3" />
-              <span className="font-medium">Choose a classroom recording</span>
-              <span className="subtle block text-xs mt-2 mb-4">
-                Video or audio · up to 100 MB / 2 hours
-              </span>
-              <input
-                aria-label="Recording file"
-                type="file"
-                required
-                accept=".mp4,.mov,.avi,.webm,.mkv,.wav,.mp3,.m4a,.flac,.ogg"
-                disabled={progress !== null}
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className="text-xs"
-              />
-            </label>
-            <p className="subtle text-xs">
-              PCM WAV audio works directly. Other audio formats and video audio
-              extraction require FFmpeg. Visible counts are anonymous estimates.
+      <div className="flex gap-2 mb-5">
+        <Button
+          type="button"
+          disabled={progress !== null}
+          aria-pressed={!live}
+          onClick={() => setLive(false)}
+        >
+          Recorded file
+        </Button>
+        <Button
+          type="button"
+          disabled={progress !== null}
+          aria-pressed={live}
+          onClick={() => setLive(true)}
+        >
+          Camera / microphone
+        </Button>
+      </div>
+      {live ? (
+        <LiveCapture sessionId={sessionId} onClose={onClose} />
+      ) : (
+        <form onSubmit={submit} className="space-y-5">
+          <Alert>
+            Original media stays on this computer. Confirm that you have
+            permission to analyze this classroom recording.
+          </Alert>
+          {available.length ? (
+            <>
+              <label className="field">
+                Session
+                <select
+                  value={selected}
+                  onChange={(e) => setSelected(e.target.value)}
+                  disabled={progress !== null}
+                >
+                  {available.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block border border-dashed border-forest/40 bg-sage/25 rounded-lg p-7 text-center">
+                <UploadCloud size={28} className="mx-auto text-forest mb-3" />
+                <span className="font-medium">
+                  Choose a classroom recording
+                </span>
+                <span className="subtle block text-xs mt-2 mb-4">
+                  Video or audio · up to 100 MB / 2 hours
+                </span>
+                <input
+                  aria-label="Recording file"
+                  type="file"
+                  required
+                  accept=".mp4,.mov,.avi,.webm,.mkv,.wav,.mp3,.m4a,.flac,.ogg"
+                  disabled={progress !== null}
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  className="text-xs"
+                />
+              </label>
+              <p className="subtle text-xs">
+                PCM WAV audio works directly. Other audio formats and video
+                audio extraction require FFmpeg. Visible counts are anonymous
+                estimates.
+              </p>
+            </>
+          ) : (
+            <p className="subtle">
+              Create a real session first. Recordings cannot be attached to
+              fictional sample sessions.
             </p>
-          </>
-        ) : (
-          <p className="subtle">
-            Create a real session first. Recordings cannot be attached to
-            fictional sample sessions.
-          </p>
-        )}
-        {error && <Alert error>{error}</Alert>}
-        {progress !== null && (
-          <div aria-live="polite">
-            <div className="flex justify-between text-xs mb-2">
-              <span>
-                {progress === 100
-                  ? "Upload received · starting analysis"
-                  : "Uploading recording"}
-              </span>
-              <span>{progress}%</span>
+          )}
+          {error && <Alert error>{error}</Alert>}
+          {progress !== null && (
+            <div aria-live="polite">
+              <div className="flex justify-between text-xs mb-2">
+                <span>
+                  {progress === 100
+                    ? "Upload received · starting analysis"
+                    : "Uploading recording"}
+                </span>
+                <span>{progress}%</span>
+              </div>
+              <progress
+                className="w-full accent-forest"
+                value={progress}
+                max={100}
+              />
             </div>
-            <progress
-              className="w-full accent-forest"
-              value={progress}
-              max={100}
-            />
+          )}
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              onClick={onClose}
+              disabled={progress !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!file || !selected || progress !== null || accepted}
+            >
+              Upload & analyze
+            </Button>
           </div>
-        )}
-        <div className="flex justify-end gap-3">
-          <Button type="button" onClick={onClose} disabled={progress !== null}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!file || !selected || progress !== null || accepted}
-          >
-            Upload & analyze
-          </Button>
-        </div>
-      </form>
+        </form>
+      )}
     </Dialog>
   );
 }

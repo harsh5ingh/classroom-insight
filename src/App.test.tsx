@@ -35,6 +35,26 @@ beforeEach(() => {
       if (path.startsWith("/api/analytics"))
         data = { summary, trend: [], sessions: [], events: [], demo: false };
       if (path === "/api/config") data = config;
+      if (path === "/api/settings/ai") {
+        const provider = {
+          model: "",
+          configured: false,
+          managed: false,
+          source: "none",
+          mask: "",
+          active: false,
+          access: "not_configured",
+          checked_at: null,
+          last_success_at: null,
+          message: "",
+          error_code: null,
+        };
+        data = {
+          revision: 0,
+          active: null,
+          providers: { gemini: provider, groq: provider },
+        };
+      }
       if (options.method) data = { id: 1 };
       return { ok: true, json: async () => data };
     }),
@@ -65,23 +85,36 @@ test("empty overview offers a real sample-data action", async () => {
     ).toBe(true),
   );
 });
-test("all eight navigation routes render and settings exposes honest key status", async () => {
-  setup();
-  await screen.findByText("A clearer view of learning.");
-  for (const [route, heading] of [
-    ["Attendance", "Create a session to take attendance"],
-    ["Sessions", "Your session library"],
-    ["Engagement Analytics", "Observe patterns. Keep the context."],
-    ["Recommendations", "From observation to a next step"],
-    ["Students", "The people in your classroom"],
-    ["Reports", "A record worth keeping"],
-    ["Settings", "Your classroom. Your controls."],
-    ["Overview", "A clearer view of learning."],
-  ]) {
+// Each route has its own assertion budget; eight full DOM transitions in one
+// five-second test were intermittently timing out on the submission machine.
+test.each([
+  ["Attendance", "Create a session to take attendance"],
+  ["Sessions", "Your session library"],
+  ["Engagement Analytics", "Observe patterns. Keep the context."],
+  ["Recommendations", "From observation to a next step"],
+  ["Students", "The people in your classroom"],
+  ["Reports", "A record worth keeping"],
+  ["Settings", "Your classroom. Your controls."],
+  ["Overview", "A clearer view of learning."],
+])(
+  "navigation opens %s",
+  async (route, heading) => {
+    setup(route === "Overview" ? "/settings" : "/");
+    await screen.findByRole("heading", {
+      name:
+        route === "Overview"
+          ? "Your classroom. Your controls."
+          : "A clearer view of learning.",
+    });
     await userEvent.click(screen.getByRole("link", { name: route }));
     await screen.findByRole("heading", { name: heading });
-  }
-});
+    if (route === "Settings")
+      expect(
+        await screen.findByText(/Local mode · Both cloud providers are off/),
+      ).toBeInTheDocument();
+  },
+  15000,
+);
 test("register student submits validated fields through backend", async () => {
   setup("/students");
   await userEvent.click(

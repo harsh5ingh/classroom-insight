@@ -291,7 +291,7 @@ export default function PublicHome({
           </div>
           <p className="preview-disclosure">
             Sample data and editorial advisory examples. Switching sessions does
-            not call Gemini. Visible movement cannot establish attention,
+            not call a cloud provider. Visible movement cannot establish attention,
             emotion or learning.
           </p>
         </section>
@@ -384,7 +384,7 @@ export default function PublicHome({
                 ],
                 [
                   "Deliberate data handling",
-                  "API keys stay on the backend. Readiness generation sends only the workflow descriptions you submit to Gemini. Configure access controls and governance before institutional use.",
+                  "Saved API keys stay in the Windows credential vault. Readiness generation sends only the workflow descriptions you submit to the active cloud provider. Configure access controls and governance before institutional use.",
                 ],
               ].map(([title, copy]) => (
                 <article key={title}>
