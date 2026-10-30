@@ -87,6 +87,7 @@ class FaceObserver:
     def __init__(self, interval, prefs=None):
         prefs = prefs or {}
         self.retain_previews = prefs.get('retain_face_previews',False)
+        self.observe_eye_line = prefs.get('observe_eye_line',True)
         self.tracker = PresenceTracker(interval,prefs.get('presence_seconds',20),prefs.get('presence_samples',3),prefs.get('still_motion_threshold',.02))
         self.last_count = 0
         self.detector = cv2.CascadeClassifier(str(Path(cv2.data.haarcascades)/'haarcascade_frontalface_default.xml'))
@@ -111,7 +112,7 @@ class FaceObserver:
             if self.retain_previews:
                 ok,jpeg = cv2.imencode('.jpg',cv2.resize(image[y:y+bh,x:x+bw],(96,96)),[cv2.IMWRITE_JPEG_QUALITY,65])
                 if ok: previews[i] = base64.b64encode(jpeg).decode('ascii')
-            if not self.eyes.empty():
+            if self.observe_eye_line and not self.eyes.empty():
                 eyes = self.eyes.detectMultiScale(gray[y:y+bh//2,x:x+bw],minNeighbors=5,minSize=(8,8))
                 if len(eyes)==2:
                     centers = sorted([(ex+ew/2,ey+eh/2) for ex,ey,ew,eh in eyes])

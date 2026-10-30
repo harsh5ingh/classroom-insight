@@ -1,3 +1,5 @@
+import SystemDiagnostics from "./SystemDiagnostics";
+import SessionInsights from "./SessionInsights";
 import { useCallback, useEffect, useState } from "react";
 import { NavLink, Route, Routes, useLocation, Link } from "react-router-dom";
 import {
@@ -16,6 +18,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Brand } from "./Brand";
+import LiveDashboard from "./LiveDashboard";
 import { api, formatDate } from "./api";
 import { Context, type Data } from "./data";
 import type { Session } from "./types";
@@ -36,11 +39,14 @@ const navigation = [
   ["/app", "Overview", LayoutDashboard],
   ["/app/attendance", "Attendance", ClipboardCheck],
   ["/app/sessions", "Sessions", Video],
+  ["/app/live", "Live Monitor", Video],
   ["/app/analytics", "Engagement Analytics", ChartNoAxesCombined],
   ["/app/recommendations", "Recommendations", Lightbulb],
   ["/app/students", "Students", Users],
   ["/app/reports", "Reports", FileText],
   ["/app/settings", "Settings", SettingsIcon],
+  ["/app/insights", "Session Evidence", ChartNoAxesCombined],
+  ["/app/diagnostics", "System Diagnostics", ShieldCheck],
 ] as const;
 export default function Dashboard({
   onSignOut,
@@ -159,7 +165,7 @@ export default function Dashboard({
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 w-60 bg-deep text-white z-40 flex flex-col px-5 py-7 transition-transform lg:translate-x-0 ${mobile ? "translate-x-0 visible" : "-translate-x-full invisible lg:visible"}`}
+        className={`fixed inset-y-0 left-0 w-60 overflow-y-auto bg-deep text-white z-40 flex flex-col px-5 py-7 transition-transform lg:translate-x-0 ${mobile ? "translate-x-0 visible" : "-translate-x-full invisible lg:visible"}`}
       >
         <Link to="/app" className="block px-2 mb-10">
           <Brand inverse />
@@ -168,13 +174,13 @@ export default function Dashboard({
           Workspace
         </p>
         <nav aria-label="Main navigation" className="space-y-1">
-          {navigation.map(([path, label, Icon], i) => (
+          {navigation.map(([path, label, Icon]) => (
             <NavLink
               key={path}
               to={path}
               end={path === "/app"}
               className={({ isActive }) =>
-                `nav-link ${isActive ? "active" : ""} ${i === 7 ? "mt-7 border-t border-white/10 pt-5" : ""}`
+                `nav-link ${isActive ? "active" : ""} ${label === "Settings" ? "mt-7 border-t border-white/10 pt-5" : ""}`
               }
             >
               <Icon size={18} strokeWidth={1.6} />
@@ -302,11 +308,14 @@ export default function Dashboard({
                 <Route path="/" element={<Overview />} />
                 <Route path="/attendance" element={<Attendance />} />
                 <Route path="/sessions" element={<Sessions />} />
+                <Route path="/live" element={<LiveDashboard />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />
                 <Route path="/recommendations" element={<Recommendations />} />
                 <Route path="/students" element={<Students />} />
                 <Route path="/reports" element={<Reports />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/insights" element={<SessionInsights />} />
+                <Route path="/diagnostics" element={<SystemDiagnostics />} />
                 <Route
                   path="*"
                   element={

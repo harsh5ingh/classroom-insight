@@ -1,3 +1,5 @@
+import { AudioInsights } from "./AudioInsights";
+import ScoringPreferences from "./ScoringPreferences";
 import AIProviders from "./AIProviders";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -1021,6 +1023,7 @@ function AnalysisDetail({ analysis }: { analysis: Analysis }) {
         </span>
       </div>
       {result.fusion && <FusionPanel fusion={result.fusion} />}
+      {audio?.spectral && <AudioInsights data={audio.spectral} />}
       <PresenceReview analysis={analysis} />
       <CameraFrames key={analysis.id} analysis={analysis} />
       {video?.face_tracking && (
@@ -1112,6 +1115,38 @@ function AnalysisDetail({ analysis }: { analysis: Analysis }) {
                 {audio.bouts_per_minute} per minute. These are not speaker
                 turns.
               </p>
+            )}
+            {audio.speech_like_intervals && audio.duration_seconds > 0 && (
+              <div className="mt-4">
+                <p className="text-xs subtle">
+                  Speech-like acoustic intervals (not recognized speech);
+                  horizontal axis is elapsed recording time.
+                </p>
+                <svg
+                  role="img"
+                  aria-label="Speech-like acoustic interval timeline, not speech recognition"
+                  viewBox={`0 0 ${audio.duration_seconds} 12`}
+                  preserveAspectRatio="none"
+                  className="w-full h-8 bg-surface-alt"
+                >
+                  {audio.speech_like_intervals.map((interval, i) => (
+                    <rect
+                      key={i}
+                      x={interval.start}
+                      y={1}
+                      width={interval.end - interval.start}
+                      height={10}
+                      fill="#285943"
+                    />
+                  ))}
+                </svg>
+                <p className="text-xs subtle">
+                  0 to {audio.duration_seconds.toFixed(1)} seconds
+                  {audio.speech_like_intervals_truncated
+                    ? " · first 360 intervals only"
+                    : ""}
+                </p>
+              </div>
             )}
             {audio.speech_like_fraction !== undefined && (
               <p className="subtle text-xs mt-3">
@@ -1690,6 +1725,7 @@ export function Settings() {
         description="Local storage, transparent processing, and optional AI assistance."
       />
       <AIProviders />
+      <ScoringPreferences />
       <section className="grid md:grid-cols-[240px_1fr] gap-6 border-b border-line pb-8">
         <div>
           <h2>Analysis preferences</h2>

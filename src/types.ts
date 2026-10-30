@@ -1,3 +1,4 @@
+import type { SpectralAudio } from "./AudioInsights";
 export type AttendanceStatus = "present" | "absent" | "unconfirmed";
 export interface AttendanceChange {
   id: number;
@@ -126,6 +127,7 @@ export interface Analysis {
       } | null;
     };
     audio: null | {
+      spectral?: SpectralAudio;
       duration_seconds: number;
       energy: { seconds: number; energy: number }[];
       active_fraction: number;
@@ -192,6 +194,9 @@ export interface Config {
     presence_samples?: number;
     still_motion_threshold?: number;
     retain_face_previews?: boolean;
+    visual_weight?: number;
+    audio_weight?: number;
+    audio_rms_threshold?: number;
   };
   ffmpeg_available: boolean;
   upload_limit_mb: number;

@@ -122,7 +122,7 @@ def create_app(config=None):
     @app.get('/api/health')
     def health():
         db().execute('SELECT 1')
-        return jsonify(status='ok', storage='sqlite', mode='local')
+        return jsonify(status='ok', storage='sqlite', mode='local', live_monitor={'protocol': 1, 'start_method': 'POST', 'start_path': '/api/live/start'})
 
     @app.get('/api/config')
     def configuration():
@@ -152,7 +152,13 @@ def create_app(config=None):
             raise ValidationError('Still-motion threshold must be 0.001–0.2 face-widths per second.')
         if 'retain_face_previews' in data and type(data['retain_face_previews']) is not bool:
             raise ValidationError('Preview retention must be true or false.')
-        optional=('face_detection','presence_seconds','presence_samples','still_motion_threshold','retain_face_previews')
+        from .scoring import explain_fusion
+        proposed = {**preferences(), **data}
+        try: explain_fusion(None,proposed['visual_weight'],proposed['audio_weight'])
+        except ValueError as exc: raise ValidationError(str(exc))
+        if type(proposed['audio_rms_threshold']) not in (int,float) or not math.isfinite(proposed['audio_rms_threshold']) or not .001<=proposed['audio_rms_threshold']<=.5:
+            raise ValidationError('Audio RMS threshold must be 0.001 to 0.5.')
+        optional=('visual_weight','audio_weight','audio_rms_threshold','face_detection','presence_seconds','presence_samples','still_motion_threshold','retain_face_previews')
         for key in ('sample_seconds','person_detection', *(k for k in optional if k in data)):
             db().execute('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,json.dumps(data[key])))
         db().commit()
@@ -298,6 +304,9 @@ def create_app(config=None):
         if not video or not audio:
             raise ValidationError('The selected recordings must supply video observations and audio observations respectively.')
         fusion = fuse_signals(video,audio,offset)
+        from .scoring import explain_fusion
+        prefs = preferences()
+        fusion = explain_fusion(fusion,prefs["visual_weight"],prefs["audio_weight"])
         if not fusion or not fusion['joint_windows']:
             raise ValidationError('These signals do not overlap at this offset. Review alignment.')
         # Face reviews remain attached to their original analysis, never duplicated.
@@ -517,6 +526,10 @@ def create_app(config=None):
     register_providers(app)
     from .capture import register_capture
     register_capture(app,job_lock,ValidationError)
+    from .live import register_live
+    register_live(app)
+    from .insights import register_insights
+    register_insights(app)
     return app
 
 if __name__=='__main__':

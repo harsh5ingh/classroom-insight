@@ -1,0 +1,4 @@
+# Optional Streamlit analytics interface; Flask must run separately.
+streamlit==1.66.1
+requests==2.34.2
+pandas==3.1.0

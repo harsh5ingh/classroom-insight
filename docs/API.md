@@ -1,5 +1,35 @@
 # Classroom Insight — REST API Reference
 
+## Master activity additions - 30 October 2026
+
+All endpoints below reuse the existing authenticated `/api/analytics` guard and demo-session cookie. No unauthenticated roster/report access is added. Errors are structured JSON; cross-origin guards and loopback defaults remain.
+
+- `GET /api/analytics/diagnostics`: installed version metadata, Python/venv, SQLite connectivity, FFmpeg, selected provider name/model and retention counts/policy. No key, vault entry ID, path or raw media. Does not test cloud generation or physical devices.
+- `GET /api/analytics/sessions/<id>/report`: `classroom-report-v1` session/attendance summary, timestamp/source history, sanitized analyses, track-confirmation associations, saved recommendations and limitations. Thumbnails/boxes/media filenames/credentials excluded. Includes `history_truncated`, `analysis_limit`, provenance and unknown values. Missing session: 404; unauthenticated: 401.
+- Optional report query `visual_weight=3&audio_weight=1`: read-only scoring preview; finite 0-10, sum >0, otherwise 400. No analysis or setting is modified. Default reads preserve saved weights, falling back to original equal weights for legacy results.
+- `?format=csv`: attachment containing attendance identifiers/status/timestamps/source; spreadsheet formula prefixes escaped. `?format=json` is the JSON report. Other formats: 400. Browser Print/Save PDF remains the optional PDF path, not a server PDF endpoint.
+- `GET /api/analytics/students/<id>`: up to 500 attendance-history rows, explicit confirmed-track evidence, `confirmed_attendance_duration: null`, `participation: null`, limitations and truncation marker. No speculative student scores.
+- Existing `PUT /api/settings` accepts optional `visual_weight`, `audio_weight` (finite 0-10, not both zero) and `audio_rms_threshold` (0.001-0.5). Existing required sample/person-detection fields remain. All validation precedes writes. Settings apply to future uploads/live starts; recorded-audio threshold does not change live RMS threshold 0.02.
+
+Audio result additions: `audio.spectral` contains `engine`, normalization, threshold, at most 360 sampled `features`, coarse `spectrogram` rows with 32 relative-power bands, min/max `waveform` envelopes, silence/broadband fractions and caveats. Waveforms are coarse envelopes, not reconstructable raw recordings. Acoustic heuristics are not ASR or conversation turns.
+
+Fusion v2 adds saved weights, per-window weighted contributions, observed `coverage`, missing-signal names, low/moderate/high periods and experimental adjacent-window change alerts. Normalization remains scene change /10% capped at 1 and audio-active fraction. No presence/noise double counting is added. Streamlit reuses these endpoints through its server-side cookie session; it has no private database API.
+
+
+## Live Monitor API — 30 October 2026
+
+All endpoints below use the existing authenticated demo cookie and local Host guard. POST additionally requires an allowed local Origin and `X-Classroom-Live: 1`. Run identifiers are scoped to their creating login. No raw image/audio retrieval endpoint is created.
+
+- `POST /api/live/start`: JSON `{session_id, consent:true, fps:4, minimum_seconds:20, minimum_samples:3, maximum_gap:10}`. Requires a non-sample session; FPS 1–5, minimum duration 20–300s, samples 3–100, gap 1–10s. Returns 201 with run ID, analysis ID and initial numeric state. One active run per process; conflict 409.
+- `POST /api/live/:id/frame`: multipart `frame` JPEG (<=256 KiB, <=640×480), `seconds` monotonic browser elapsed time, optional JSON `audio` containing `{start,end,rms,active_fraction,intervals:[{start,end}]}`. Audio is numeric only, bounded to five seconds/100 intervals. Request <=300 KiB. Returns current normalized boxes, tracks, measured processing latency/FPS, windows and errors/warnings. Backend uses server monotonic timestamps for presence. Busy or too-fast requests return 429 and must be dropped, not queued.
+- `POST /api/live/:id/confirm`: `{track_id,student_id,identity_confirmed:true}`. Requires sustained qualification, visible track, last server observation within 2s and membership of this run's roster. Returns `{duplicate,confirmed}`. Existing attendance PK/audit uniqueness plus transaction prevent duplicate entries; source is `instructor_live_confirmation`. No automated identification occurs.
+- `POST /api/live/:id/suggestions`: `{cloud:false}` by default. Returns the existing `{source,items,note}` recommendation format using actual aggregate run metrics. Explicit cloud opt-in uses the selected provider only; failure/no provider uses local rules. Limited to four requests/minute.
+- `POST /api/live/:id/end`: `{}`. Saves final numerical analysis, releases run state; repeated end is idempotent. Numeric checkpoints are saved approximately every ten seconds. Other JSON requests <=4 KiB.
+
+Errors are structured `live_error`: 400 invalid input, 401 missing session, 403 owner/origin mismatch, 409 busy monitor or conflicting track identity, 410 expired/restarted run, 413 request/frame too large, 429 processor busy/sampling too fast. A five-second cleanup loop expires inactive runs after >20s. The browser stops devices on errors and requires explicit recovery.
+
+Completed live analyses reuse existing `/api/analyses`, session analytics and reports. `source.kind=live_monitor`, `video.face_tracking`, `fusion`, `live_audio_intervals` and limitations record provenance. There is no retained original media; `/media` returns 404, and recorded-media presence confirmation cannot be used retrospectively. Fusion windows expose visual/audio coverage and `joint_coverage`; counts alone do not imply overlapping measurements. See [Live Monitor](LIVE_MONITOR.md) for formulas and retention.
+
 **Base path:** `/api`
 **Purpose:** Local demonstration and evaluation
 
@@ -687,3 +717,7 @@ Failures are structured: 400 invalid input/missing configuration, 401 missing se
 Persistent revisions prevent stale responses replacing newer UI state. Managed verification metadata persists across restart; environment-backed verification resets to unverified after restart while retaining its historical success time. The legacy `/api/config/verify-gemini` and `/api/config.gemini` compatibility interface remains; the new Settings UI uses `/api/settings/ai` as its authority. Recommendations still accept `use_gemini`, now meaning use the selected cloud provider, and return source `gemini`, `groq`, or `local`. Readiness uses the selected provider and validates the same Brief schema. All cloud failures preserve local operational functionality.
 
 See [AI Provider Security](AI_PROVIDER_SECURITY.md). No schema migration or credential export was introduced.
+
+### Live Monitor backend compatibility check
+
+`GET /api/health` includes `live_monitor: {"protocol": 1, "start_method": "POST", "start_path": "/api/live/start"}`. This read-only response contains no credentials or session data. The browser checks protocol 1 before requesting a camera. Missing metadata identifies an incompatible/stale backend. Live-start remains POST-only: unauthenticated 401, malformed authorized JSON 400, successful start 201. Vite may answer OPTIONS itself; check actual POST routing rather than treating its preflight as proof of backend registration.

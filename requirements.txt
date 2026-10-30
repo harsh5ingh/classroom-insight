@@ -1,10 +1,7 @@
-Flask>=3.1,<4
-numpy>=2.1,<3
-opencv-python-headless>=4.10,<5
-python-dotenv>=1.0,<2
-google-genai>=1.0,<3
-keyring>=25,<26
-groq>=1.7,<2
-pydantic>=2.12,<3
-pytest>=8,<10
-waitress>=3,<4
+# Backward-compatible backend + provider SDKs + test tooling.
+# Optional extras: -r requirements-audio.txt -r requirements-dashboard.txt
+# Reproduction constraints for this verified Windows/Python 3.13 environment:
+# -c requirements-lock-python313-windows.txt
+-r requirements-core.txt
+-r requirements-providers.txt
+-r requirements-dev.txt

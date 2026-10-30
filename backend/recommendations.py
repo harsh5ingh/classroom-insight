@@ -136,11 +136,15 @@ def summarize(analysis, attendance):
     if audio:
         metrics['sound_active_fraction'] = audio['active_fraction']
         metrics['sound_bouts'] = audio.get('activity_bouts')
+        spectral=audio.get('spectral') or {}
+        metrics['broadband_activity_fraction']=spectral.get('broadband_activity_fraction')
     fusion = (analysis or {}).get('fusion')
     if fusion:
+        metrics['high_activity_window_count']=sum(p.get('score') is not None and p['score']>=80 and min(p.get('visual_coverage',0),p.get('audio_coverage',0))>=.8 for p in fusion.get('points',[]))
         metrics['observable_activity_index'] = fusion['score']
         metrics['joint_signal_windows'] = fusion['joint_windows']
         metrics['activity_index_caveat'] = fusion['limitations']
+    metrics['missing_modalities']=[name for name,present in [('video',bool(video)),('audio',bool(audio) or any(p.get('sound') is not None for p in (fusion or {}).get('points',[])))] if not present]
     return metrics
 
 def local_rules(metrics):
@@ -162,6 +166,12 @@ def local_rules(metrics):
     if 'sound_active_fraction' in metrics and metrics['sound_active_fraction'] < .2:
         items.append({'title':'Make space for discussion', 'body':'If discussion was intended, consider an open question or paired activity. Check microphone placement first; silence is not evidence of disengagement.',
                       'evidence':f"Sound exceeded the energy threshold in {metrics['sound_active_fraction']*100:.1f}% of the recording."})
+    if metrics.get('broadband_activity_fraction') is not None and metrics['broadband_activity_fraction']>.5:
+        items.append({'title':'Review sustained broadband sound','body':'Check microphone placement and the recording before considering a short classroom reset. Fans, music and equipment can produce this pattern; it is not verified disruption.','evidence':f"Broadband acoustic heuristic matched {metrics['broadband_activity_fraction']*100:.1f}% of decoded audio."})
+    if metrics.get('high_activity_window_count',0)>0:
+        items.append({'title':'Review an active session segment','body':'Compare these windows with your lesson notes. If the intended exercise was productive, consider repeating it; high observable activity alone does not establish successful learning.','evidence':f"{metrics['high_activity_window_count']} windows scored at least 80 with at least 80% coverage in both modalities."})
+    if metrics.get('missing_modalities'):
+        items.append({'title':'Check capture coverage','body':'Collect the missing signal only with appropriate permission, or review the available evidence on its own. Do not infer participation from missing data.','evidence':'Unavailable modalities: '+', '.join(metrics['missing_modalities'])})
     if not items:
         items.append({'title':'Add context to your next review', 'body':'Compare these observations with the lesson format and your own notes. No additional rule threshold was met; that does not establish engagement.',
                       'evidence':f"{attendance['present']} confirmed present; {attendance['total']} roster records. Media source: {metrics['data_kind']}."})
@@ -176,7 +186,7 @@ def generate(metrics, use_gemini=False):
         source, response = cloud_json(
             'Suggest up to three practical classroom teaching actions from these aggregate metrics only. '
             'Never infer identity, emotion, attention, ability or motivation. Scene changes and sound energy are weak proxies. '
-            'State uncertainty. No student data or raw media is included. Return a JSON object with an items array of objects with title, body, evidence strings. '
+            'State uncertainty. Do not include numeric claims in titles or bodies; the server attaches measured evidence. No student data or raw media is included. Return a JSON object with an items array of objects with title, body, evidence strings. '
             + json.dumps(metrics))
         items = response['items']
         if not isinstance(items,list) or not 1 <= len(items) <= 3:
@@ -184,7 +194,12 @@ def generate(metrics, use_gemini=False):
         for item in items:
             if not isinstance(item,dict) or any(not isinstance(item.get(k),str) or not 1 <= len(item[k]) <= 1500 for k in ('title','body','evidence')):
                 raise ValueError('Invalid output')
-        return {'source':source, 'items':items, 'note':'AI-generated advisory text. Review against the measurements; statements may be inaccurate.'}
+        import re
+        if any(re.search(r'[0-9]',item['title']+' '+item['body']) for item in items):
+            raise ValueError('Numeric claims are not accepted in generated advice')
+        evidence='Supplied aggregate observations: '+json.dumps(metrics,ensure_ascii=False,sort_keys=True)
+        items=[{**item,'evidence':evidence} for item in items]
+        return {'source':source, 'items':items, 'note':'AI-generated advisory text with server-attached measurements. Review suggestions against lesson context; prose may be inaccurate.'}
     except Exception as exc:
         from .providers import safe_error
         return {'source':'local','items':fallback,'note':safe_error(exc).message+' Local rules were used.'}

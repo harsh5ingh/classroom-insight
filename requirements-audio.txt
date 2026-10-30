@@ -1,0 +1,3 @@
+# Optional enriched acoustics; NumPy fallback remains functional.
+librosa==0.11.0
+scipy==1.18.1

@@ -1,4 +1,5 @@
 """Explicit browser snapshot capture. No device access or recording on the server."""
+from .scoring import explain_fusion
 import io
 import json
 import math
@@ -98,7 +99,7 @@ def analyze_camera(path,prefs,progress):
             'pose_method':'Head pose unsupported. Eye-line roll is a 2D image heuristic only, not a head-pose estimate.'}
     return {'kind':'measured','source':{'kind':'browser_camera','frame_seconds':timestamps,
             'clock':'Browser monotonic elapsed timestamps; not independently verified wall-clock time.'},
-            'video':video,'audio':None,'fusion':fuse_signals(video,None),'unavailable':unavailable,
+            'video':video,'audio':None,'fusion':explain_fusion(fuse_signals(video,None),prefs.get('visual_weight',1),prefs.get('audio_weight',1)),'unavailable':unavailable,
             'notes':['Explicit browser capture; uploaded only after instructor review. No automatic attendance or identity inference.']}
 
 

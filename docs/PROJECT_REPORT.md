@@ -1,5 +1,38 @@
 # Project Report — Classroom Insight
 
+## Master implementation findings - 30 October 2026
+
+The project title for this submission is **Multimodal Attendance & Engagement Agent**; Classroom Insight remains the existing product. The user's thirteen SkillWallet activities are traced individually in [REQUIREMENTS_AUDIT.md](REQUIREMENTS_AUDIT.md). The original official brief screenshot and mandatory report template have not been obtained; this Markdown report is not certified as that template.
+
+Implemented additions include read-only system/privacy diagnostics; optional Librosa/SciPy spectral analysis of recorded PCM audio; normalized channel/sample rate; waveform envelopes, spectrogram and speech-like interval timeline; configurable interpretable scoring with coverage/contributions; experimental abrupt-change alerts; session comparison; track confirmation/audit timelines; privacy-conscious student evidence; CSV/JSON reports and browser print/PDF; and a functioning optional Streamlit interface using the same authenticated Flask reports. Existing live capture, explicit identity confirmation, local rules and secure Gemini/Groq manager were retained.
+
+The audio noise test revealed a normalization defect: upsampling introduced a silent frequency region that biased flatness. Restricting flatness to usable source bandwidth corrected the tested synthetic noise classification. A separate stereo antiphase test verifies downmix happens before both primary RMS and spectral features. These findings establish implementation correctness for controlled signals, not real classroom speech/noise accuracy.
+
+Verification: 145 Python tests including 3 Streamlit API/AppTest cases, 76 frontend tests, explicit TypeScript check and production build passed. Expanded Streamlit coverage exercised real isolated Flask HTTP login, charts, saved recommendations, comparison and logout. Six upstream Pandas deprecation warnings in Streamlit did not fail tests. Package imports, constrained installation dry-run and pip check passed. HTTP startup checks returned 200 for backend health, Vite page and Streamlit health/page; unauthenticated protected diagnostics returned 401.
+
+Synthetic live HTTP benchmark: 42 blank JPEGs, zero faces, two aligned acoustic/visual windows, median 13.44ms and p95 26.30ms request latency; no raw media retained. Synthetic 20s audio analysis: 3.841s engine initialization and 0.108s processing. These are single-machine synthetic measurements, not physical-device or classroom throughput guarantees.
+
+Limitations: no real camera/microphone or new browser screenshot evidence (tool permission denied); no calibrated head pose/landmarks, ASR, verified participant interaction, scientifically validated attention score, or reliable whole-session attendance duration. MediaPipe was evaluated through a wheel/dependency dry-run but not installed because it introduces a conflicting OpenCV namespace distribution. FFmpeg is absent locally. Current pins require Python >=3.12, tested on 3.13.15; Python 3.9 compatibility is not claimed. PDF printing still needs manual verification. Local demo authentication must be replaced before institutional deployment.
+
+All original SQLite rows and .env bytes were fingerprint-verified unchanged. No schema migration, user-data reset, QA-session deletion, credential-vault change, commit or push was performed. Existing screenshots remain historical; no image was fabricated for the added features.
+
+Primary implementation references: [Librosa resampling](https://librosa.org/doc/latest/generated/librosa.resample.html), [Librosa spectral features](https://librosa.org/doc/latest/feature.html), [Streamlit AppTest](https://docs.streamlit.io/develop/api-reference/app-testing/st.testing.v1.apptest), [MediaPipe Python setup](https://ai.google.dev/edge/mediapipe/solutions/setup_python). Actual package resolution/import/test results are the compatibility evidence for this machine.
+
+
+## Live monitoring extension — latest scope (30 October 2026)
+
+This addendum supersedes the earlier statement that continuous online inference is absent. The existing application now includes `/app/live`: continuous opt-in camera preview, 1–5 FPS resized JPEG processing by local OpenCV, anonymous conservative IoU tracking, configurable sustained-presence review, explicit roster confirmation with timestamped history, simultaneous optional microphone RMS monitoring, aligned numerical activity windows and requested teaching suggestions. Recorded video/audio, snapshot/WAV capture and the secure Gemini/Groq manager remain. No new schema or ML dependency was added.
+
+The dark forest workspace adds session controls, video overlays, acoustic activity, observed FPS/latency, a track queue, coverage-aware trends and evidence-linked suggestions. It is product code rather than a static mockup, but visual responsiveness and hardware operation remain unverified because browser control is permission-disabled. No reference screenshot was available and no synthetic screenshot is presented as evidence.
+
+Presence is credited from server monotonic matches with each interval capped at `2 / target_fps`, requiring at least 20 credited seconds and three observations by default. Bounded occlusion can preserve an anonymous ID without crediting the missing time. Confirmation requires a currently visible qualified track, a roster student and an explicit instructor identity attestation. This is not facial recognition or automatic identity-linked attendance.
+
+Audio RMS >=0.02 is an activity heuristic, not speech recognition. Experimental multimodal scores combine normalized scene change and acoustic-active fraction only over available intervals. Calibrated head pose, gaze, emotions, attention and learning success are unsupported. The live pipeline never stores JPEGs, waveforms, face crops or embeddings. Numeric checkpoints/history persist; live raw replay cannot be provided.
+
+Measured synthetic evidence: 40 direct blank 320×240 JPEGs processed at median 3.03ms/p95 3.39ms; 42 frames through real isolated loopback HTTP at median 21.89ms/p95 40.68ms. These values exclude real camera rendering and classroom faces/noise and establish no real-world accuracy or production throughput guarantee.
+
+Full implementation/data-flow diagram, bounded-resource policy, security, test names and data-preservation incident are documented in [LIVE_MONITOR.md](LIVE_MONITOR.md). The official SkillWallet report template remains unavailable; this Markdown report does not claim mandatory-template compliance.
+
 ## October 30 submission addendum — current implementation and evidence
 
 **Template status:** the official SkillWallet mandatory report template and original Instructions screenshot were not available in the repository. This Markdown document is a technical project report, **not a claim of template compliance**. The latest user-supplied 15-requirement checklist is mapped in [REQUIREMENTS_AUDIT.md](REQUIREMENTS_AUDIT.md#capstone-compliance-matrix--30-october-2026). Earlier sections below describe the original product and must be read with this addendum.
@@ -40,7 +73,7 @@ Movement is face-box displacement in face-widths/second; stillness uses a config
 
 Audio uses RMS energy and bounded speech-like intervals from energy, zero crossing and spectral-band heuristics. The first 360 heuristic intervals are returned with an explicit truncation flag; the fraction is calculated from all processed samples. These metrics can respond to music, tones or noise. No automatic speech recognition, verified speech VAD, speaker identification or conversation-turn understanding is implemented.
 
-The experimental activity score is the equal mean of available normalized visual change (`min(change / 10%, 1)`) and sound-active duration fraction within aligned windows, scaled to 0–100, followed by duration-weighted averaging. Actual timestamps, missing-signal values and coverage are shown. Separate recordings require instructor-supplied alignment. The formula and 10% scale are uncalibrated heuristics; scores are not validated engagement measurements. They never justify claims about an individual learner's attention or success.
+The experimental activity score is the configurable weighted mean (equal by default) of available normalized visual change (`min(change / 10%, 1)`) and sound-active duration fraction within aligned windows, scaled to 0–100, followed by duration-weighted averaging. Actual timestamps, missing-signal values and coverage are shown. Separate recordings require instructor-supplied alignment. The formula and 10% scale are uncalibrated heuristics; scores are not validated engagement measurements. They never justify claims about an individual learner's attention or success.
 
 ### Actual verification results
 

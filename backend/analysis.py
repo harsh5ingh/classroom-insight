@@ -13,12 +13,15 @@ from .observations import FaceObserver, fuse_signals
 MAX_DURATION = 7200
 MAX_SAMPLES = 360
 
-def audio_metrics(path):
+def audio_metrics(path, prefs=None):
+    from .audio_features import AudioFeatures
+    prefs = prefs or {}
     with wave.open(str(path), 'rb') as audio:
         width, channels, rate, frames = audio.getsampwidth(), audio.getnchannels(), audio.getframerate(), audio.getnframes()
         duration = frames / rate if rate else 0
         if width not in (1, 2, 4) or not 1 <= channels <= 8 or not 1 <= rate <= 192000 or not 0 < duration <= MAX_DURATION:
             raise ValueError('Use PCM WAV (8, 16 or 32 bit), up to two hours and eight channels.')
+        detail = AudioFeatures(duration, prefs.get("audio_rms_threshold", .015))
         energies = []
         speechlike_seconds = 0.0
         speechlike_intervals=[]
@@ -31,9 +34,10 @@ def audio_metrics(path):
                 raise ValueError('The WAV recording is truncated or has invalid frame metadata.')
             samples = np.frombuffer(data, dtype={1:np.uint8, 2:'<i2', 4:'<i4'}[width]).astype(np.float64)
             samples = (samples - 128) / 128 if width == 1 else samples / (2 ** (width * 8 - 1))
-            energy = float(np.sqrt(np.mean(samples ** 2))) if samples.size else 0.0
-            energies.append({'seconds':second, 'energy':round(energy, 6)})
             mono = samples.reshape(-1,channels).mean(axis=1)
+            energy = float(np.sqrt(np.mean(mono ** 2))) if mono.size else 0.0
+            energies.append({'seconds':second, 'energy':round(energy, 6)})
+            detail.add(mono,rate,second)
             frame_size = max(1,round(rate*.03))
             for offset in range(0,len(mono),frame_size):
                 frame = mono[offset:offset+frame_size]
@@ -43,7 +47,7 @@ def audio_metrics(path):
                 spectrum = np.abs(np.fft.rfft(frame*np.hanning(len(frame))))**2
                 frequencies = np.fft.rfftfreq(len(frame),1/rate)
                 band = float(spectrum[(frequencies>=100)&(frequencies<=min(3800,rate*.45))].sum()/max(spectrum.sum(),1e-15))
-                if rms>.015 and .02<=crossings<=.35 and band>.65:
+                if rms>prefs.get("audio_rms_threshold",.015) and .02<=crossings<=.35 and band>.65:
                     speechlike_seconds += len(frame)/rate
                     start,end=second+offset/rate,second+(offset+len(frame))/rate
                     if speechlike_intervals and abs(speechlike_intervals[-1]['end']-start)<1e-6:
@@ -51,7 +55,7 @@ def audio_metrics(path):
                     elif len(speechlike_intervals)<360:
                         speechlike_intervals.append({'start':start,'end':end})
                     else: speechlike_truncated=True
-    threshold = max(.015, float(np.percentile([r['energy'] for r in energies], 20)) * 2) if energies else .015
+    threshold = max(prefs.get("audio_rms_threshold",.015), float(np.percentile([r['energy'] for r in energies], 20)) * 2) if energies else .015
     active = [r for r in energies if r['energy'] > threshold]
     intervals = []
     for row in active:
@@ -64,7 +68,7 @@ def audio_metrics(path):
     step = max(1, math.ceil(len(energies) / MAX_SAMPLES))
     chart = [{'seconds':chunk[0]['seconds'], 'energy':round(float(np.mean([r['energy'] for r in chunk])),6)}
              for i in range(0,len(energies),step) if (chunk := energies[i:i+step])]
-    return {'duration_seconds':duration, 'energy':chart, 'active_fraction':round(active_seconds / duration, 4) if duration else 0,
+    return {'spectral':detail.result(), 'duration_seconds':duration, 'energy':chart, 'active_fraction':round(active_seconds / duration, 4) if duration else 0,
             'threshold':threshold, 'active_intervals':intervals,
             'activity_bouts':len(intervals), 'bouts_per_minute':round(len(intervals)*60/duration,2),
             'speech_like_fraction':round(speechlike_seconds/duration,4),
@@ -165,7 +169,7 @@ def analyze_media(path, prefs, progress):
                 capture.release()
         if wav_path:
             try:
-                result['audio'] = audio_metrics(wav_path)
+                result['audio'] = audio_metrics(wav_path, prefs)
             except (wave.Error, ValueError, EOFError) as exc:
                 if suffix == '.wav':
                     raise ValueError('Invalid or unsupported PCM WAV recording.') from exc
@@ -173,6 +177,8 @@ def analyze_media(path, prefs, progress):
         if not result['video'] and not result['audio']:
             raise ValueError('No signals could be decoded. Upload PCM WAV audio, or install FFmpeg for other audio formats.')
         result['fusion'] = fuse_signals(result['video'],result['audio'])
+        from .scoring import explain_fusion
+        result['fusion'] = explain_fusion(result['fusion'],prefs.get('visual_weight',1),prefs.get('audio_weight',1))
         progress(95)
         return result
     finally:

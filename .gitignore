@@ -109,3 +109,5 @@ temp/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+# Optional dashboard secrets must never be committed
+.streamlit/secrets.toml

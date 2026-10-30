@@ -1,0 +1,4 @@
+# Optional cloud SDKs and secure Windows vault; local rules work without cloud access.
+google-genai==2.34.0
+groq==1.7.0
+keyring==25.7.0

@@ -66,6 +66,15 @@
   }
 }
 @layer components {
+  .live-workspace { @apply grid gap-4 rounded-lg bg-deep text-white p-4 md:grid-cols-2 xl:grid-cols-[220px_minmax(0,1fr)_260px]; }
+  .live-sidebar, .live-video, .live-audio { @apply min-w-0 rounded-md border border-white/15 p-4; }
+  .live-video { @apply md:col-span-1; }
+  .live-workspace h2 { @apply text-base; }
+  .live-workspace .btn { @apply whitespace-normal; }
+  .live-workspace input, .live-workspace select { @apply text-ink; }
+  .live-workspace .btn:not(.btn-primary) { @apply text-ink; }
+  .live-box { @apply absolute border-2 border-sage pointer-events-none; }
+  .live-box span { @apply absolute left-0 top-0 bg-deep text-white text-xs px-1 whitespace-nowrap; }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors border border-line bg-white hover:bg-secondary whitespace-nowrap;
   }

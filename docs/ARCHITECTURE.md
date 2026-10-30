@@ -1,5 +1,65 @@
 # Classroom Insight — Architecture
 
+## Master implementation additions - current architecture
+
+No tables or schema relationships changed. `backend/insights.py` reads the existing sessions, students, attendance, attendance_changes, analyses, recommendations and settings tables. Reports attach explicit track/analysis confirmation history and sanitize stored analysis JSON. They do not mutate results. Root configuration and the Windows credential-vault architecture remain unchanged.
+
+```mermaid
+flowchart LR
+  React[React SPA: existing dashboard + diagnostics + evidence] -->|authenticated REST| Flask[Flask app]
+  Streamlit[Optional Streamlit UI: loopback 8501] --> Client[Per-session DashboardClient]
+  Client -->|demo cookie + read-only report REST| Flask
+  Flask --> Reports[insights.py diagnostics / reports]
+  Reports --> DB[(Existing SQLite)]
+  Upload[Recorded media / PCM WAV] --> Analysis[analysis.py]
+  Analysis --> Audio[AudioFeatures: optional Librosa + SciPy / NumPy fallback]
+  Analysis --> Fusion[scoring.py explain_fusion]
+  Live[Existing live.py Windows] --> Fusion
+  Fusion --> DB
+  Flask --> Providers[Existing secure provider manager]
+  Providers --> Vault[Windows Credential Manager]
+  Providers --> Cloud[Optional Gemini or Groq]
+  Providers --> Rules[Local recommendation rules]
+```
+
+Audio is decoded in one-second PCM blocks, downmixed to mono, optionally resampled to 16 kHz and described using bounded FFT windows. Full-rate acoustic decisions remain separate from at-most-360 display summaries. The enriched stored result identifies the engine and the sampled display stride. Live microphone data remains RMS metadata only; no live waveform retention was added.
+
+`explain_fusion` handles configured relative weights, available signals, duration-weighted means, contributions and coverage. Report previews call it on a copy of saved results. Experimental anomalies require adjacent windows, matching available modalities, >=80% weighted coverage and an absolute score change >=30. Coverage is not statistical confidence. Presence, movement and noise descriptors provide context rather than duplicated weighted evidence.
+
+Streamlit uses the same demo login, bounded requests and report schema. Its server-side requests session is held only in that Streamlit session's memory; no cross-user cache, provider secret form, direct SQLite connection or alternate database exists. It is local single-user demo software, not a multi-tenant deployment. Browser/device verification is still pending.
+
+
+## Continuous live extension — current behavior (30 October 2026)
+
+This section supersedes statements above that all camera analysis is batch-only. The old snapshot/WAV workflow remains available. `src/LiveDashboard.tsx` adds `/app/live` within `Dashboard.tsx`. `src/liveMonitor.ts` manages opt-in hardware, asynchronous JPEG sampling and a one-request-in-flight loop. Web Audio RMS windows accompany resized frames; no waveform is transmitted. `backend/live.py` owns an in-memory session registry, expiry/release, `LiveTracker`, bounded ten-second windows and protected routes. It reuses `FaceObserver` with face previews/eye-line estimation disabled, existing attendance audit tables, recommendations and provider selection.
+
+```mermaid
+sequenceDiagram
+ participant I as Instructor
+ participant B as Browser LiveMonitor
+ participant F as Flask live routes
+ participant O as OpenCV + LiveTracker
+ participant D as Existing SQLite
+ I->>B: Consent + Start camera
+ B->>F: Start non-sample session
+ F->>D: Create analysis row
+ loop Target 1–5 FPS, one frame in flight
+   B->>F: JPEG + optional numeric acoustic window
+   F->>O: Decode + detect + spatial association
+   O-->>F: Anonymous observations, qualification
+   F-->>B: Boxes, tracks, latency and aligned numeric windows
+ end
+ I->>B: Select roster student + confirm identity
+ B->>F: Confirm qualified visible track
+ F->>D: Transactional attendance + audit history
+ I->>B: End / hide / navigate
+ B->>B: Stop device tracks, timers, audio context
+ B->>F: End (or inactivity expiry)
+ F->>D: Final numeric analysis; no raw media
+```
+
+No schema migration or new tables are required. The registry is single-process and bounded (one run, 200 tracks, one hour, 360 numeric windows). End/reaper removes live memory; restart leaves partial checkpoints under failed analyses via existing initialization. Raw replay is deliberately unavailable. Qualification uses trusted server elapsed time while fusion uses validated client elapsed timestamps; transport uncertainty is disclosed. Full formulas, coverage handling and limits: [LIVE_MONITOR.md](LIVE_MONITOR.md).
+
 ## Capture extension — 30 October 2026
 
 This extension uses the existing protected API, local worker lock and SQLite tables; **no new migration** is required. Settings are additional validated keys in the existing `settings` table. The prior additive attendance migration/backup remains unchanged.

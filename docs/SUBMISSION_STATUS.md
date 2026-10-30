@@ -1,4 +1,137 @@
+## Master implementation submission status - 30 October 2026
+
+The existing application was extended in place. This is **not a claim of full hardware-validated SkillWallet compliance**. All thirteen supplied activities are individually classified in [REQUIREMENTS_AUDIT.md](REQUIREMENTS_AUDIT.md#master-skillwallet-activity-matrix---30-october-2026). Official brief/template matching remains pending.
+
+### Current executed results
+
+From `D:\Coding\classroom-insight`:
+
+```powershell
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
+.\.venv\Scripts\python.exe -B -m pytest -q -p no:cacheprovider --basetemp=data/capstone-submission-tests
+npm test -- --maxWorkers=1
+node node_modules/typescript/bin/tsc --noEmit --incremental false -p tsconfig.json
+npm run build
+.\.venv\Scripts\python.exe -B scripts/validate_environment.py --imports
+.\.venv\Scripts\python.exe -m pip check
+.\.venv\Scripts\python.exe -B scripts/verify_live_monitor.py --qa-database-confirmed
+```
+
+- Final Python suite: **145 passed, 6 warnings, 36.47s**. Includes **3 Streamlit tests**, 14 new capstone cases and all existing backend/provider/live regressions. Streamlit/Pandas emits an upstream future deprecation warning about inplace reset_index; tests pass. Temporary/disposable databases only.
+- Final frontend: **76 passed, 8 files, 35.76s**. Browser devices are mocks; these are not hardware results.
+- Explicit TypeScript check passed; production build passed with **2641 transformed modules, 1.12s**.
+- Expanded Streamlit AppTest uses an actual ephemeral Flask HTTP server and synthetic records: login, attendance, tracks, activity charts, audio, recommendations, comparison and logout; no real database mutation. Tests also cover safe unavailable-backend errors and loopback-only client validation.
+- Live HTTP smoke: **42 synthetic blank JPEG frames**, zero detections, two aligned windows, local suggestions, end/cleanup and raw-media 404. Median request latency **13.44ms**, p95 **26.30ms**. No classroom accuracy inference.
+- Synthetic 20s PCM silence/tone/noise benchmark: Librosa initialization **3.841s**, audio analysis **0.108s**, 20 feature windows. This excludes real microphone/codec input.
+- Actual process health: Flask 5000 health 200; Vite 5173 diagnostics page HTML 200; protected diagnostics without a cookie 401; Streamlit 8501 health and HTML 200. HTTP availability is not browser visual verification.
+- Imports of installed core/audio/dashboard/provider/vault packages passed; pip check passed; constrained install dry-run passed. MediaPipe not installed; FFmpeg absent.
+- Original SQLite table row fingerprints and .env bytes matched the pre-task baseline. No reset, reseed, migration, removal or modification of sessions 8/9. No Windows vault access/change by the added diagnostics. Configured-secret scan found no keys in source/docs/bundle; private files remain ignored. No commit/push.
+
+### Files added in this master phase
+
+`.streamlit/config.toml`; `backend/audio_features.py`; `backend/insights.py`; `backend/scoring.py`; `dashboard_client.py`; `streamlit_app.py`; `requirements-core.txt`; `requirements-providers.txt`; `requirements-dev.txt`; `requirements-audio.txt`; `requirements-dashboard.txt`; `requirements-lock-python313-windows.txt`; `scripts/validate_environment.py`; `src/AudioInsights.tsx`; `src/ScoringPreferences.tsx`; `src/SessionInsights.tsx`; `src/SystemDiagnostics.tsx`; `src/capstone.test.tsx`; `tests/test_capstone.py`; `tests/test_streamlit_dashboard.py`; `docs/STREAMLIT_DASHBOARD.md`; `docs/SYSTEM_DIAGNOSTICS.md`.
+
+### Existing files modified in this master phase
+
+`.gitignore`; `requirements.txt`; `README.md`; `backend/analysis.py`; `backend/app.py`; `backend/capture.py`; `backend/db.py`; `backend/live.py`; `backend/recommendations.py`; `src/Dashboard.tsx`; `src/LiveDashboard.tsx`; `src/pages.tsx`; `src/types.ts`; `docs/API.md`; `docs/ARCHITECTURE.md`; `docs/PROJECT_REPORT.md`; `docs/REQUIREMENTS_AUDIT.md`; `docs/SUBMISSION_STATUS.md`; `docs/LIVE_MONITOR.md`.
+
+Some live files were already untracked/modified at the start; those edits were preserved and extended. Existing edits to observations, App tests, capture UI and styles were not reverted. Original requirements.lock.txt and npm lock were not modified. Ignored QA logs, disposable test databases, synthetic benchmark media, .venv packages and dist outputs are generated local verification artifacts, not submission data.
+
+### Run the complete application
+
+Use three terminals, each at `D:\Coding\classroom-insight`. Reuse healthy servers; do not launch duplicates.
+
+```powershell
+cd D:\Coding\classroom-insight
+.\.venv\Scripts\python.exe -m backend.app
+```
+
+```powershell
+cd D:\Coding\classroom-insight
+npm run dev
+```
+
+```powershell
+cd D:\Coding\classroom-insight
+.\.venv\Scripts\python.exe -m streamlit run streamlit_app.py --server.address 127.0.0.1 --server.port 8501
+```
+
+React: http://127.0.0.1:5173/ . Streamlit: http://127.0.0.1:8501/ . Optional dependency installation and minimal/core groups are documented in SYSTEM_DIAGNOSTICS.md. For the full feature set use `python -m pip install -r requirements.txt -r requirements-audio.txt -r requirements-dashboard.txt -c requirements-lock-python313-windows.txt` through the existing venv. The current pinned baseline is Python >=3.12, tested 3.13.15.
+
+### Evaluator/demo recording walkthrough
+
+1. Show homepage and demo employee login. Do not record filled passwords, provider key inputs, .env, vault or DevTools authorization headers.
+2. Open System Diagnostics. Show imported-package evidence separately from browser device enumeration. Explain missing FFmpeg/MediaPipe honestly.
+3. Register only authorized demo/consented students and create an actual non-sample classroom session through the instructor workflow. Do not rename or delete QA sessions 8/9 just for presentation.
+4. In Live Monitor select that session, obtain participant authorization, start camera and microphone separately, and grant browser permissions. Show genuine preview/observations if available. A face can be missed by Haar; never fabricate boxes. Wait for actual credited duration/observations, explicitly confirm identity against the roster, then show attendance history. If hardware fails, demonstrate the error and use clearly labelled recorded/test media instead.
+5. Upload a consented PCM WAV (or explicitly labelled synthetic file) and video. Show sampled waveform/spectrum, acoustic intervals and the disclaimer that these are not speech recognition. Without FFmpeg, upload separate WAV and align timestamps explicitly.
+6. In Session Evidence inspect track/audit timelines, compare sessions, preview weights, restore stored formula and inspect contributions/coverage. Export JSON/CSV; browser PDF printing is a manual check. Show unknown duration/participation rather than inventing student scores.
+7. Request local recommendations and show the actual supporting metrics. Optional Gemini/Groq generation requires an explicitly selected configured provider; no genuine generation was performed during this phase.
+8. Open Streamlit, sign in, select the same session, compare charts/counts and download reports. Sign out. End Live Monitor and confirm browser camera/microphone indicators stop before ending the recording.
+
+### Submission checklist and remaining gaps
+
+- P0 before public/institutional deployment: keep loopback-only demo services private; implement real authentication, ownership/roles and audited governance before exposing records.
+- P1 for demonstration: enable local-browser tool access and website device permissions; perform/record a genuine camera + microphone + confirmed-attendance flow. Browser tool currently denies access. No new screenshot or hardware pass is claimed.
+- P1: evaluate labelled classroom face/occlusion/low-light accuracy and real noisy audio; install and validate FFmpeg if extraction from video is required. MediaPipe requires a compatible single-OpenCV environment and actual model verification; landmarks/head pose remain unsupported.
+- P2: manually check desktop/mobile/keyboard layouts and PDF print, longer/concurrent loads, report pagination and retention needs. Whole-session confirmed duration, individual participation and ASR remain unavailable; no unsupported scores are substituted.
+- P3: obtain the official SkillWallet report template and original brief, match every required field, record evaluator walkthrough, and capture real screenshots with fictional/authorized data. Existing screenshot gallery is historical, not evidence of the new screens.
+- Preserve local records/credentials; exclude .env, databases, media, vault contents and generated sensitive exports from submission. Review git status before any later user-authorized commit.
+
+
+## Live Monitor startup repair - 30 October 2026
+
+Resolved the reproduced POST `/api/live/start` 405 by restarting the identified stale Flask processes. Added backend compatibility preflight, usable-video readiness, pending microphone cancellation and explicit session selection. All original SQLite rows and .env bytes fingerprint-verified unchanged; QA sessions 8/9 remain intact. No genuine classroom session currently exists; the instructor must create one.
+
+Current checks: **128 backend tests and 71 frontend tests passed; TypeScript and production build passed**. Isolated HTTP test processed 42 synthetic frames. Browser access was denied with “Local browser use is disabled in Work settings”; genuine camera/microphone checks remain pending. See [LIVE_MONITOR.md](LIVE_MONITOR.md#startup-repair-verification---30-october-2026) for evidence, commands and manual checks. Results below are historical.
+
 # Classroom Insight — submission status
+
+## Live Monitor — final verification, 30 October 2026
+
+Delivered in the existing app: continuous camera preview and sampled local OpenCV processing, anonymous tracks with conservative gap handling, configurable sustained presence, explicit live roster confirmation, microphone acoustic monitoring, aligned numeric trends, experimental activity index, requested suggestions and resource/error controls. Existing uploads, reports and Gemini/Groq vault settings remain. No new dependency or schema migration.
+
+### Executed checks
+
+- `$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; .\.venv\Scripts\python.exe -B -m pytest -p no:cacheprovider --basetemp=data/live-final-tests -q` — **127 passed in 22.85s**. Includes provider-manager and existing recorded-analysis regression suites.
+- `npm test -- --maxWorkers=1` — **67 passed across 7 files in 26.12s**. Browser devices in these tests are simulated.
+- `node node_modules/typescript/bin/tsc --noEmit --incremental false -p tsconfig.json` — passed.
+- `npm run build` — passed, 2,637 modules transformed.
+- `.\.venv\Scripts\python.exe -B scripts/verify_live_monitor.py --qa-database-confirmed` — corrected self-hosted isolated HTTP test passed: 42 synthetic blank frames, two aligned numeric windows, no detections, local suggestions, completed analysis, no retained raw media (media GET 404). Median HTTP latency 21.89ms; p95 40.68ms. No hardware is involved.
+- Targeted direct processing benchmark: 40 blank 320×240 frames, median 3.03ms and p95 3.39ms. These are synthetic measurements, not real classroom FPS/accuracy guarantees.
+- Browser verification and genuine camera/microphone tests: **not run**; the browser tool rejected access with “Local browser use is disabled in Work settings.” No fabricated screenshots or hardware results.
+
+### Launch and evaluator steps
+
+Restart the existing project backend in its own terminal so new `/api/live` routes are loaded (an older localhost process returned 405 during verification). From `D:\Coding\classroom-insight`:
+
+```powershell
+.\.venv\Scripts\python.exe -m backend.app
+```
+
+Separately, run or reuse Vite in this same checkout:
+
+```powershell
+npm run dev
+```
+
+Open `http://127.0.0.1:5173/app/live`. Use a non-sample session with a roster. Consent, start camera, allow permission, optionally start microphone, wait for sustained qualification, then explicitly identify/confirm a student. Generate local suggestions. End monitoring, inspect the completed numerical analysis and attendance history/CSV. Verify camera/mic indicators stop on End, tab hide and navigation. Recorded upload/replay remains a separate workflow. See [Live Monitor guide](LIVE_MONITOR.md).
+
+### Remaining limits
+
+No real camera/microphone or responsive visual validation yet; no validated classroom detection accuracy. Haar can miss/fragment tracks; no face recognition, head pose, gaze, emotion, speech recognition, speaker identity or individual attention scores. One Flask process/run, one-hour limit, conservative 200-track cap. Browser audio timings have transport uncertainty. Raw live replay is intentionally unavailable. Restart recovery requires explicit Start and new track IDs. No new cloud-provider request was required or claimed in this phase.
+
+### Preservation and test incident
+
+All pre-existing classroom records match the pre-test snapshot, and `.env` was not edited. However, two initial HTTP smoke attempts reached an older port-5000 application instead of the intended QA server. They added **two empty Synthetic live HTTP QA sessions (IDs 8 and 9)**, two events and two demo-session rows, and changed a login rate-limit row. Neither session contains attendance. These additions were not deleted, respecting the no-delete instruction. The script now starts its own unique-port server with an explicit disposable database. Do not describe the original database as unchanged. No commit or push was performed.
+
+### Files changed in this phase
+
+New: `backend/live.py`, `src/LiveDashboard.tsx`, `src/liveMonitor.ts`, `src/liveMonitor.test.tsx`, `tests/test_live.py`, `scripts/verify_live_monitor.py`, `docs/LIVE_MONITOR.md`.
+
+Updated: `backend/app.py`, `backend/observations.py`, `src/Dashboard.tsx`, `src/LiveCapture.tsx`, `src/App.test.tsx`, `src/styles.css`, `README.md`, `docs/API.md`, `docs/ARCHITECTURE.md`, `docs/REQUIREMENTS_AUDIT.md`, `docs/SUBMISSION_STATUS.md`, `docs/PROJECT_REPORT.md`.
+
+Ignored generated artifacts: frontend build and TypeScript metadata, disposable test databases/media and the pre-test snapshot under `data/live-monitor-qa/`. No secrets or raw live media were added to tracked files.
 
 Updated 30 October 2026. Project: `D:\Coding\classroom-insight`.
 

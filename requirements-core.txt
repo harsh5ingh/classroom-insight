@@ -1,0 +1,7 @@
+# Local Flask/OpenCV runtime. Verified on Python 3.13 Windows. NumPy baseline requires Python >=3.12.
+Flask==3.1.3
+numpy==2.5.4
+opencv-python-headless==4.14.0.94
+python-dotenv==1.2.4
+waitress==3.0.2
+pydantic==2.14.1

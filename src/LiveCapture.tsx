@@ -122,6 +122,13 @@ export function LiveCapture({
   };
   return (
     <div className="space-y-4">
+      <p>
+        <a className="text-forest underline" href="/app/live" onClick={onClose}>
+          Open continuous Live Monitor
+        </a>{" "}
+        for ongoing camera processing and microphone activity. This dialog
+        remains the explicit snapshot/WAV recording workflow.
+      </p>
       <Alert>
         Visible, opt-in local capture. Camera: snapshots every 2 seconds (no
         audio), up to 60 frames. Microphone: PCM WAV, up to 2 minutes. Analysis

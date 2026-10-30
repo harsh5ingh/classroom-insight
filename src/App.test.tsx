@@ -95,6 +95,7 @@ test.each([
   ["Students", "The people in your classroom"],
   ["Reports", "A record worth keeping"],
   ["Settings", "Your classroom. Your controls."],
+  ["Live Monitor", "Live classroom monitor"],
   ["Overview", "A clearer view of learning."],
 ])(
   "navigation opens %s",

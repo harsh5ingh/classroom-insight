@@ -1,5 +1,54 @@
 # Classroom Insight
 
+## SkillWallet master implementation update
+
+The existing React/Flask product now includes **System Diagnostics** (`/app/diagnostics`), **Session Evidence** (`/app/insights`), configurable weighted activity scores and experimental change alerts, track/audit timelines, student attendance evidence, richer recorded-audio analysis, and an optional **Streamlit analytics dashboard**. Live Monitor and secure Gemini/Groq settings remain in place. New reports use existing data, with no schema migration or data reset.
+
+Recorded PCM WAV analysis optionally uses Librosa/SciPy for mono 16 kHz normalization, RMS, zero crossings, centroid, rolloff, energy, noise-like labels, bounded waveform envelopes and coarse spectrograms. It does not recognize speech or identify speakers. Live microphone monitoring remains lightweight RMS without raw-audio retention. Missing signals and unknown attendance duration remain explicitly unavailable.
+
+**Verified:** 145 Python tests (including 3 Streamlit tests), 76 frontend tests, TypeScript and production build. Browser access is permission-blocked; real hardware and new screenshots remain pending. The current pinned dependency baseline requires Python >=3.12; Python 3.13.15 was tested. MediaPipe landmarks and head pose remain unsupported; FFmpeg extraction is unavailable on this machine until FFmpeg is installed.
+
+See the [activity matrix](docs/REQUIREMENTS_AUDIT.md), [submission results and file manifest](docs/SUBMISSION_STATUS.md), [system diagnostics](docs/SYSTEM_DIAGNOSTICS.md), and [Streamlit guide](docs/STREAMLIT_DASHBOARD.md). These current sections supersede earlier dated verification counts.
+
+Optional dependencies, from `D:\Coding\classroom-insight`:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-audio.txt -r requirements-dashboard.txt -c requirements-lock-python313-windows.txt
+.\.venv\Scripts\python.exe -B scripts/validate_environment.py --imports
+```
+
+Keep the existing Flask/Vite commands below. For Streamlit, in another terminal in the same project:
+
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run streamlit_app.py --server.address 127.0.0.1 --server.port 8501
+```
+
+Open http://127.0.0.1:8501 and use the documented demo employee login. It reads authenticated Flask reports, never SQLite or provider credentials directly. Do not expose the demo services publicly.
+
+
+## Continuous Live Monitor — current extension
+
+Open **Live Monitor** in the existing dashboard (`/app/live`). It provides an opt-in continuous camera preview, sampled OpenCV face detection, anonymous IDs, conservative sustained-presence qualification, explicit roster confirmation, optional microphone RMS monitoring, aligned activity windows and evidence-linked suggestions. The dark forest workspace complements the existing dashboard; recorded video/audio and snapshot upload remain available.
+
+Start camera and microphone separately after participant authorization. No raw live frames/audio are saved: only numerical observations and explicitly confirmed attendance are retained. Head pose, gaze, speech recognition and individual attention scores are unsupported. Use **End session** before navigating. Hidden tabs, device loss and backend failures stop devices; restart explicitly to recover.
+
+Read [Live Monitor guide](docs/LIVE_MONITOR.md) for architecture, thresholds, privacy, measured synthetic performance, test evidence and the manual demo checklist. **Real browser/hardware verification is pending:** browser control is permission-disabled. The guide also discloses two empty QA sessions accidentally added during the initial HTTP check; no previous classroom records were removed.
+
+Run from `D:\Coding\classroom-insight`:
+
+```powershell
+.\.venv\Scripts\python.exe -m backend.app
+```
+
+In a separate terminal in the same folder:
+
+```powershell
+npm run dev
+```
+
+Restart an older Flask process in its own terminal first; `/api/live/start` is new. Open `http://127.0.0.1:5173/app/live`. Do not terminate unrelated processes. The normal single-process Flask command is required for the in-memory live registry.
+
+
 ### Multimodal Attendance & Engagement Agent
 
 A local-first instructor workspace for roster-based attendance, classroom activity analysis, engagement insights, and evidence-linked teaching suggestions.
@@ -152,7 +201,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the implementation diagrams, req
 ### Prerequisites
 
 - Node.js 22.12 or later; Node.js 26 was used for verification.
-- Python 3.10 or later; Python 3.13 was used for verification.
+- Python 3.12 or later for the current pinned dependencies; Python 3.13.15 was used for verification.
 - Windows PowerShell for the commands below.
 
 ### 1. Open the project
@@ -331,7 +380,7 @@ These signals are imperfect proxies and should not be interpreted as definitive 
 
 The system does not implement facial identification, emotion detection, covert recording, or individual attention scoring.
 
-The experimental **observable activity index** aligns video and sound observations into time windows. Visual change is normalized by 10% intensity change and capped at 100; sound is the percentage of available audio duration above the activity threshold. Available components receive equal weight; missing components are excluded and coverage is displayed. The session value is duration-weighted. These choices are transparent heuristics, not calibrated engagement or learning measurements.
+The experimental **observable activity index** aligns video and sound observations into time windows. Visual change is normalized by 10% intensity change and capped at 100; sound is the percentage of available audio duration above the activity threshold. Available components receive configurable weights (equal by default); missing components are excluded and coverage is displayed. The session value is duration-weighted. These choices are transparent heuristics, not calibrated engagement or learning measurements.
 
 When FFmpeg is unavailable, upload a video and a separate PCM WAV of the same lesson to the same session, then use Analytics → **Combine separate video and audio recordings**. Set the audio start offset relative to video and confirm alignment. The original analyses remain intact; a derived analysis records their IDs and offset.
 
@@ -538,7 +587,7 @@ Settings now manages **Google Gemini** and **Groq** through Windows Credential M
 4. **Test connection** performs real generation, even while inactive. **Enable** selects that provider and disables the other without deleting its key. Selection persists after restart.
 5. **Delete saved key** requires confirmation. Deletion disables that provider and blocks silent reuse of its environment key. A new Settings key can be saved later.
 
-Install/update the backend dependencies with `.\.venv\Scripts\python.exe -m pip install -r requirements.txt` (or the pinned `requirements.lock.txt`). Start Flask with `.\.venv\Scripts\python.exe -m backend.app`; start Vite separately with `npm run dev`, both from `D:\Coding\classroom-insight`. Open http://127.0.0.1:5173/. Windows vault access uses the Windows user running Flask. Other OSes fail closed for managed credential storage.
+Install/update the backend dependencies with `.\.venv\Scripts\python.exe -m pip install -r requirements.txt` with optional groups and the current `requirements-lock-python313-windows.txt` constraints as described above. Start Flask with `.\.venv\Scripts\python.exe -m backend.app`; start Vite separately with `npm run dev`, both from `D:\Coding\classroom-insight`. Open http://127.0.0.1:5173/. Windows vault access uses the Windows user running Flask. Other OSes fail closed for managed credential storage.
 
 Existing recommendation requests use the selected provider; `use_gemini` is retained as a compatibility field name. Readiness briefs use the same selected provider and report their actual source. They require cloud access; local recommendation rules remain usable without it. Never expose this demo-authenticated local installation publicly.
 
