@@ -5,3 +5,4 @@
 -r requirements-core.txt
 -r requirements-providers.txt
 -r requirements-dev.txt
+gunicorn
